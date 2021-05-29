@@ -58,3 +58,18 @@ target_compile_options(${This} PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:GNU>:-Wall -Werror -Wextra>>
   $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:MSVC>:/W3>>
 )
+
+# copy *.pem to folder with binary
+set(Configs
+  "DigiCertHighAssuranceEVRootCA.crt.pem"
+)
+
+foreach(config ${Configs})
+  message(STATUS "\t\tTrying to copy to */${config}")
+  # Copy files for ctests
+  # configure_file("${config}" "${config}" COPYONLY)
+  # Copy files for Debug
+  configure_file("${config}" "Debug/${config}" COPYONLY)
+  # Copy files for Release
+  configure_file("${config}" "Release/${config}" COPYONLY)
+endforeach()
