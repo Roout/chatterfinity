@@ -23,7 +23,7 @@ public:
         , std::shared_ptr<boost::asio::ssl::context>
     );
 
-    void Start(const char *address, int port);
+    void Start(const char *address, const char *protocol);
 
     // not thread-safe
     void Write(std::string text);

@@ -21,13 +21,13 @@ Client::~Client() {
     std::cout << "Client closed...\n";
 }
 
-void Client::Connect(const char *address, int port) {
+void Client::Connect(const char *address, const char *protocol) {
     m_connection = std::make_shared<Connection>(id++
         , this->weak_from_this()
         , m_log
         , m_context
         , m_sslContext);
-    m_connection->Start(address, port);
+    m_connection->Start(address, protocol);
     std::cout << "Initiate connection ...\n";
 }
 
@@ -37,9 +37,9 @@ void Client::Reset() {
 }
 
 void Client::Run() {
-    const char *ADDRESS = "127.0.0.1";
-    const int PORT = 15001;
-    this->Connect(ADDRESS, PORT);
+    const char *ADDRESS = "www.boost.org/doc/libs/1_76_0/doc/html/boost_asio/example/cpp03/http/client/sync_client.cpp";
+    const char *PROTOCOL = "https";
+    this->Connect(ADDRESS, PROTOCOL);
 
     std::vector<std::thread> threads;
     for (std::size_t i = 0; i < 4; i++) {

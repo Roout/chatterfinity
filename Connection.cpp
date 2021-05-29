@@ -25,9 +25,9 @@ Connection::Connection(std::size_t id
 {
 }
 
-void Connection::Start(const char *address, int port) {
+void Connection::Start(const char *address, const char * protocol) {
     boost::asio::ip::tcp::resolver resolver(*m_context);
-    const auto endpoints = resolver.resolve(address, std::to_string(port));
+    const auto endpoints = resolver.resolve(address, protocol);
     if (endpoints.empty()) {
         this->Shutdown();
     }

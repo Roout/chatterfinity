@@ -23,7 +23,7 @@ public:
 
 private:
 
-    void Connect(const char *address, int port);
+    void Connect(const char *address, const char *protacol);
 
 private:
     std::shared_ptr<Log> m_log { nullptr };
