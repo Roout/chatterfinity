@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -71,9 +72,45 @@ int main() {
 
         boost::asio::streambuf response;
         error.clear();
-        std::cout << "\n\tRead: \n";
-        while (boost::asio::read(socket, response, boost::asio::transfer_at_least(1), error)) {
-            std::cout << &response;
+
+        {
+            const size_t headerLength = boost::asio::read_until(socket, response, "\r\n\r\n", error);
+            const auto data { response.data() };
+            const std::string header {
+                boost::asio::buffers_begin(data), 
+                boost::asio::buffers_begin(data) + headerLength
+            };
+            response.consume(headerLength);
+            std::cout << "\tHeader:\n" << header << '\n';
+        }
+        // TODO: check for error!
+
+        constexpr char *delim = "\r\n";
+        constexpr size_t delimSize = 2;
+        size_t chunkCounter = 0;
+        for (size_t chunkCounter = 0, chunkLength = 0; 
+            !error; 
+            chunkLength = boost::asio::read_until(socket, response, delim, error)
+        ) {
+            const auto data { response.data() };
+            const auto size { response.size() };
+            const std::string buffer {
+                boost::asio::buffers_begin(data), 
+                boost::asio::buffers_begin(data) + size
+            };
+            std::string_view bufferView { buffer };
+
+            size_t proccessedBytes = 0;
+            while (proccessedBytes < size) {
+                auto chunk { bufferView };
+                auto delimiter = chunk.find_first_of(delim);
+                if (delimiter == std::string_view::npos) break;
+                chunk.remove_suffix(chunk.size() - delimiter);
+                bufferView.remove_prefix(delimiter + delimSize);
+                proccessedBytes += delimiter + delimSize;
+                std::cout << "Chunk " << ++chunkCounter << ':' << chunk << '\n';
+            }
+            response.consume(proccessedBytes);
         }
 
         if (error != boost::asio::error::eof)
