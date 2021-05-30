@@ -94,6 +94,7 @@ int main() {
         }
 
         constexpr std::string_view CRLF = "\r\n";
+        std::string body = "";
         size_t chunkCounter = 0;
         for (size_t chunkCounter = 0, chunkLength = 0; 
             !error; // expect either EOF either other error to finish this loop
@@ -117,6 +118,7 @@ int main() {
                 proccessedBytes += delimiter + CRLF.size();
                 if (chunkCounter & 1) {
                     std::cout << "Chunk " << chunkCounter / 2 << ':' << chunk << '\n';
+                    body.append(chunk.data(), chunk.size());
                 }
                 else {
                     size_t value = 0;
@@ -132,12 +134,14 @@ int main() {
                 }
                 chunkCounter++;
             }
+
             response.consume(proccessedBytes);
         }
-
         if (error != boost::asio::error::eof) {
             throw boost::system::system_error(error);
         }
+
+        std::cout << "\tBody:\n" << body << "\n";
     }
     catch (std::exception const& e) {
         std::cout << e.what() << '\n';
