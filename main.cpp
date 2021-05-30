@@ -1,20 +1,17 @@
-// #include "Client.hpp"
-// int main() {
-//     auto context = std::make_shared<boost::asio::io_context>();
-//     std::shared_ptr<Client> client = std::make_shared<Client>(context);
-//     client->Run();
-//     return 0;
-// }
-
 #include <iostream>
 #include <string>
 #include <string_view>
 #include <sstream>
 #include <vector>
+#include <cassert>
 #include <charconv>
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
+
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
@@ -142,6 +139,18 @@ int main() {
         }
 
         std::cout << "\tBody:\n" << body << "\n";
+
+        rapidjson::Document reader;
+        reader.Parse(body.data());
+        auto token = reader["access_token"].GetString();
+        const auto tokenType = reader["token_type"].GetString();
+        const auto expires = reader["expires_in"].GetUint64();
+
+        [[maybe_unused]] constexpr auto expectedDuration = 24 * 60 * 60 - 1;
+        assert(expires >= expectedDuration && "Unexpected duration. Blizzard API may be changed!");
+        assert(!strcmp(tokenType, "bearer") && "Unexpected token type. Blizzard API may be changed!");
+
+        std::cout << "Extracted token: [" << token << "]\n";
     }
     catch (std::exception const& e) {
         std::cout << e.what() << '\n';
