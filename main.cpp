@@ -73,24 +73,27 @@ int main() {
         boost::asio::streambuf response;
         error.clear();
 
-        {
-            const size_t headerLength = boost::asio::read_until(socket, response, "\r\n\r\n", error);
+        {   
+            constexpr std::string_view delimiter = "\r\n\r\n";
+            const size_t headerLength = boost::asio::read_until(socket, response, delimiter, error);
             const auto data { response.data() };
             const std::string header {
                 boost::asio::buffers_begin(data), 
-                boost::asio::buffers_begin(data) + headerLength
+                boost::asio::buffers_begin(data) + headerLength - delimiter.size()
             };
             response.consume(headerLength);
             std::cout << "\tHeader:\n" << header << '\n';
         }
-        // TODO: check for error!
+        
+        if (error) {
+            throw boost::system::system_error(error);
+        }
 
-        constexpr char *delim = "\r\n";
-        constexpr size_t delimSize = 2;
+        constexpr std::string_view CRLF = "\r\n";
         size_t chunkCounter = 0;
         for (size_t chunkCounter = 0, chunkLength = 0; 
-            !error; 
-            chunkLength = boost::asio::read_until(socket, response, delim, error)
+            !error; // expect either EOF either other error to finish this loop
+            chunkLength = boost::asio::read_until(socket, response, CRLF, error)
         ) {
             const auto data { response.data() };
             const auto size { response.size() };
@@ -103,19 +106,25 @@ int main() {
             size_t proccessedBytes = 0;
             while (proccessedBytes < size) {
                 auto chunk { bufferView };
-                auto delimiter = chunk.find_first_of(delim);
+                auto delimiter = chunk.find_first_of(CRLF);
                 if (delimiter == std::string_view::npos) break;
                 chunk.remove_suffix(chunk.size() - delimiter);
-                bufferView.remove_prefix(delimiter + delimSize);
-                proccessedBytes += delimiter + delimSize;
-                std::cout << "Chunk " << ++chunkCounter << ':' << chunk << '\n';
+                bufferView.remove_prefix(delimiter + CRLF.size());
+                proccessedBytes += delimiter + CRLF.size();
+                if (chunkCounter & 1) {
+                    std::cout << "Chunk " << chunkCounter / 2 << ':' << chunk << '\n';
+                }
+                else {
+                    std::cout << "Chunk " << chunkCounter / 2 << " size: " << chunk << '\n';
+                }
+                chunkCounter++;
             }
             response.consume(proccessedBytes);
         }
 
-        if (error != boost::asio::error::eof)
+        if (error != boost::asio::error::eof) {
             throw boost::system::system_error(error);
-    
+        }
     }
     catch (std::exception const& e) {
         std::cout << e.what() << '\n';
