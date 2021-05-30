@@ -9,7 +9,10 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <sstream>
 #include <vector>
+#include <charconv>
+
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 
@@ -51,13 +54,14 @@ int main() {
     const auto endpoints = resolver.resolve(host, "https");
     if (endpoints.empty()) {
         std::cout << "[ERROR]: Endpoints not found!\n";
-        exit(1);
+        std::abort();
     }
 
     error.clear();
     boost::asio::connect(socket.lowest_layer(), endpoints.begin(), endpoints.end(), error);
     if (error) {
         std::cout << "[ERROR]: " << error.message() << '\n';
+        std::abort();
     }
     socket.lowest_layer().set_option(tcp::no_delay(true));
 
@@ -84,7 +88,7 @@ int main() {
             response.consume(headerLength);
             std::cout << "\tHeader:\n" << header << '\n';
         }
-        
+
         if (error) {
             throw boost::system::system_error(error);
         }
@@ -115,7 +119,16 @@ int main() {
                     std::cout << "Chunk " << chunkCounter / 2 << ':' << chunk << '\n';
                 }
                 else {
-                    std::cout << "Chunk " << chunkCounter / 2 << " size: " << chunk << '\n';
+                    size_t value = 0;
+                    auto [p, ec] = std::from_chars(std::data(chunk), std::data(chunk) + std::size(chunk), value, 16);
+                    if (ec == std::errc()) {
+                        std::cout << "Chunk " << chunkCounter / 2 << " size: " << value << '\n';
+                    }
+                    else {
+                        std::cout << "[ERROR]: Unexpected input.\n\tBefore parsing: " 
+                            << chunk << "\n\tAfter parsing: " << p << '\n';
+                        std::abort();
+                    }
                 }
                 chunkCounter++;
             }
