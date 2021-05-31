@@ -5,7 +5,7 @@
 #include <cassert>
 #include <optional>
 #include <charconv>
-
+#include <unordered_map>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 
@@ -17,6 +17,37 @@ namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
 namespace temp {
+
+    std::string AsLowerCase(std::string_view str) {
+        std::string copy { str };
+        for (auto& c: copy) c = std::tolower(c);
+        return copy;
+    }
+
+    constexpr std::string_view Trim(
+        std::string_view text, 
+        std::string_view exclude = " \n\r\t\v\0"
+    ) {
+        if (const size_t leftShift = text.find_first_not_of(exclude); 
+            leftShift != std::string_view::npos
+        ) {
+            text.remove_prefix(leftShift); 
+        }
+        else {
+            return {};
+        }
+
+        if (const size_t rightShift = text.find_last_not_of(exclude); 
+            rightShift != std::string_view::npos
+        ) {
+            text.remove_suffix(text.size() - rightShift - 1); 
+        }
+        else {
+            return {};
+        }
+        
+        return text;
+    }
 
     class Client {
     public:
@@ -60,30 +91,54 @@ namespace temp {
         }
 
         void ReadHeader() {
-            assert(m_socket.has_value() && "optional of ssl socket is null");
-
-            m_inbox.consume(m_inbox.size());
-            assert(!m_inbox.size() && "Must be empty!");
-
             constexpr std::string_view delimiter = "\r\n\r\n";
+            constexpr std::string_view CRLF = "\r\n";
+            
+            m_fields.clear();
+            m_inbox.consume(m_inbox.size());
+
+            assert(m_socket.has_value() && "optional of ssl socket is null");
+            assert(!m_inbox.size() && m_fields.empty() && "Must be empty!");
+
             boost::system::error_code error;
             const size_t headerLength = boost::asio::read_until(*m_socket, m_inbox, delimiter, error);
-
             if (error && error != boost::asio::error::eof) {
                 throw boost::system::system_error(error);
             }
-
             assert(headerLength && "Read 0 bytes!");
+
             const auto data { m_inbox.data() };
-            m_header.assign(
+            std::string header {
                 boost::asio::buffers_begin(data), 
                 boost::asio::buffers_begin(data) + headerLength - delimiter.size()
-            );
+            };
             m_inbox.consume(headerLength);
-            std::cout << "-----> Read Header:\n" << m_header << '\n';
+
+            // PARSE HEADER: 
+            // extract STATUS
+            size_t statusEnd = header.find_first_of(CRLF.data());
+            assert(statusEnd != std::string::npos && "Header doesn't have a status");
+            statusEnd += CRLF.size();
+            // extract FIELDS
+            for (size_t start = statusEnd, finish = header.find_first_of(CRLF.data(), statusEnd); 
+                finish != std::string::npos && start != finish;
+                finish = header.find_first_of(CRLF.data(), start)
+            ) {
+                std::string_view raw { header.data() + start, finish - start };
+                auto split = raw.find_first_of(':');
+                std::string_view key { raw.data(), split };
+                raw.remove_prefix(split + 1);
+                m_fields.emplace(AsLowerCase(key), Trim(raw, " "));
+                // update start
+                start = finish + CRLF.size();
+            }
+            std::cout << "----> Header\n";
+            for (auto const& [key, value]: m_fields) {
+                std::cout << key << ":" << value << '\n';
+            }
         }
 
-        // partially done according to https://datatracker.ietf.org/doc/html/rfc7230#section-4.1
+        // partially done according to [chuncks](https://datatracker.ietf.org/doc/html/rfc7230#section-4.1)
         void ReadBodyChucks() {
             constexpr std::string_view CRLF = "\r\n";
             boost::system::error_code error;
@@ -94,9 +149,7 @@ namespace temp {
                 bytes; 
                 bytes = boost::asio::read_until(*m_socket, m_inbox, CRLF, error), chunkCounter++
             ) {
-                
                 const auto data = m_inbox.data();
-                
                 std::string chunk(
                     boost::asio::buffers_begin(data), 
                     boost::asio::buffers_begin(data) + bytes - CRLF.size()
@@ -119,7 +172,6 @@ namespace temp {
                     }
                     std::cout << "Chunk " << chunkCounter / 2 << " size: " << chunkLength << '\n';
                 }
-
                 m_inbox.consume(bytes);
                 if (chunk.empty()) break;
             }
@@ -134,26 +186,53 @@ namespace temp {
 
         void ReadBody() {
             assert(m_socket.has_value() && "optional of ssl socket is null");
-            m_body.clear();
-            constexpr std::string_view CRLF = "\r\n";
-            boost::system::error_code error;
-            while (boost::asio::read_until(*m_socket, m_inbox, CRLF, error)) {
-                const auto data { m_inbox.data() };
-                const auto size { m_inbox.size() };
-                m_body.append(
-                    boost::asio::buffers_begin(data), 
-                    boost::asio::buffers_begin(data) + size - CRLF.size()
-                );
-                m_inbox.consume(size);
+            
+            const auto savedData { m_inbox.data() };
+            const auto savedSize { m_inbox.size() };
+            m_body.assign(
+                boost::asio::buffers_begin(savedData), 
+                boost::asio::buffers_begin(savedData) + savedSize
+            );
+            m_inbox.consume(savedSize);
+
+            const auto& contentLength = m_fields.at("content-length");
+            // size of the content I need to parse from the HTTP response
+            size_t bodyExpectedSize = 0;
+            const auto [parsed, ec] = std::from_chars(contentLength.data()
+                , contentLength.data() + contentLength.size()
+                , bodyExpectedSize
+                , 10);
+            if (ec != std::errc()) {
+                std::cout << "[ERROR]: Unexpected input.\n"
+                    << "\tBefore parsing: " << contentLength << '\n'
+                    << "\tAfter parsing: " << parsed << '\n';
+                std::abort();
             }
+
+            boost::system::error_code error;
+            auto parsedContentSize = m_body.size();
+            constexpr size_t CHUNK_SIZE = 1024;
+            while (parsedContentSize < bodyExpectedSize && !error) {
+                const std::size_t smallestChunk = std::min(CHUNK_SIZE, bodyExpectedSize - parsedContentSize);
+                size_t readBytes = boost::asio::read(*m_socket, m_inbox, boost::asio::transfer_exactly(smallestChunk), error);
+                m_body.append(
+                    boost::asio::buffers_begin(m_inbox.data()), 
+                    boost::asio::buffers_begin(m_inbox.data()) + readBytes
+                );
+                m_inbox.consume(readBytes);
+                parsedContentSize += readBytes;
+            }
+
+            if (error && error != boost::asio::error::eof) {
+                throw boost::system::system_error(error);
+            }
+
+            assert(parsedContentSize == bodyExpectedSize && "Smth terribly wrong");
+            std::cout << "\tBody:\n" << m_body << "\n";
         }
 
         std::string GetBody() const noexcept {
             return std::move(m_body);
-        }
-
-        std::string GetHeader() const noexcept {
-            return std::move(m_header);
         }
 
         void Close() noexcept {
@@ -181,6 +260,10 @@ namespace temp {
             m_socket.emplace(*m_context, *m_sslContext);
         }
 
+        bool IsEncoded() const {
+            return m_fields.find("transfer-encoding") != m_fields.cend();
+        }
+
     private:
         std::shared_ptr<boost::asio::io_context> m_context;
         std::shared_ptr<ssl::context> m_sslContext;
@@ -192,7 +275,7 @@ namespace temp {
 
         boost::asio::streambuf m_inbox;
         // parsed
-        std::string m_header;
+        std::unordered_map<std::string, std::string> m_fields; 
         std::string m_body;
     };
 }
@@ -258,13 +341,22 @@ int main() {
         
         client.Write(request);
         client.ReadHeader();
-        client.ReadBodyChucks();
+        if (client.IsEncoded()) {
+            client.ReadBodyChucks();
+        }
+        else {
+            client.ReadBody();
+        }
         
         client.Write(request);
         client.ReadHeader();
-        client.ReadBodyChucks();
-
-        // client.Close();
+        if (client.IsEncoded()) {
+            client.ReadBodyChucks();
+        }
+        else {
+            client.ReadBody();
+        }
+        client.Close();
     }
     catch (std::exception const& e) {
         std::cout << e.what() << '\n';
