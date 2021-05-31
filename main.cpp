@@ -6,6 +6,8 @@
 #include <optional>
 #include <charconv>
 #include <unordered_map>
+#include <stdexcept>
+
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 
@@ -47,6 +49,23 @@ namespace temp {
         }
         
         return text;
+    }
+
+    size_t ExtractInteger(std::string_view sequence, size_t radix = 10) {
+        using namespace std::literals;
+        size_t value;
+        const auto [parsed, ec] = std::from_chars(std::data(sequence)
+            , std::data(sequence) + std::size(sequence)
+            , value
+            , radix);
+        if (ec != std::errc()) {
+            auto message = "std::from_chars met unexpected input.\n\tBefore parsing: "s 
+                + std::string{ sequence.data(), sequence.size() } 
+                + "\n\tAfter parsing: "s 
+                + parsed;
+            throw std::logic_error(message);
+        }
+        return value;
     }
 
     class Client {
@@ -162,14 +181,7 @@ namespace temp {
                 }
                 else { 
                     // chunk size
-                    size_t chunkLength = 0;
-                    auto [parsed, ec] = std::from_chars(chunk.data(), chunk.data() + chunk.size(), chunkLength, 16);
-                    if (ec != std::errc()) {
-                        std::cout << "[ERROR]: Unexpected input.\n"
-                            << "\tBefore parsing: " << chunk << '\n'
-                            << "\tAfter parsing: " << parsed << '\n';
-                        std::abort();
-                    }
+                    const size_t chunkLength = ExtractInteger(chunk, 16);
                     std::cout << "Chunk " << chunkCounter / 2 << " size: " << chunkLength << '\n';
                 }
                 m_inbox.consume(bytes);
@@ -195,19 +207,8 @@ namespace temp {
             );
             m_inbox.consume(savedSize);
 
-            const auto& contentLength = m_fields.at("content-length");
             // size of the content I need to parse from the HTTP response
-            size_t bodyExpectedSize = 0;
-            const auto [parsed, ec] = std::from_chars(contentLength.data()
-                , contentLength.data() + contentLength.size()
-                , bodyExpectedSize
-                , 10);
-            if (ec != std::errc()) {
-                std::cout << "[ERROR]: Unexpected input.\n"
-                    << "\tBefore parsing: " << contentLength << '\n'
-                    << "\tAfter parsing: " << parsed << '\n';
-                std::abort();
-            }
+            const size_t bodyExpectedSize = ExtractInteger(m_fields.at("content-length"));
 
             boost::system::error_code error;
             auto parsedContentSize = m_body.size();
