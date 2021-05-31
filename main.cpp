@@ -106,12 +106,11 @@ namespace temp {
             const auto writeBytes = boost::asio::write(
                 *m_socket, boost::asio::const_buffer(request.c_str(), request.size())
             );
-            std::cout << "-----> Write request:\n" << request << '\n';
+            std::cout << "-----> Write request:\n" << request;
         }
 
         void ReadHeader() {
-            constexpr std::string_view delimiter = "\r\n\r\n";
-            constexpr std::string_view CRLF = "\r\n";
+            constexpr std::string_view HEADER_DELIMITER = "\r\n\r\n";
             
             m_fields.clear();
             m_inbox.consume(m_inbox.size());
@@ -120,7 +119,7 @@ namespace temp {
             assert(!m_inbox.size() && m_fields.empty() && "Must be empty!");
 
             boost::system::error_code error;
-            const size_t headerLength = boost::asio::read_until(*m_socket, m_inbox, delimiter, error);
+            const size_t headerLength = boost::asio::read_until(*m_socket, m_inbox, HEADER_DELIMITER, error);
             if (error && error != boost::asio::error::eof) {
                 throw boost::system::system_error(error);
             }
@@ -129,7 +128,7 @@ namespace temp {
             const auto data { m_inbox.data() };
             std::string header {
                 boost::asio::buffers_begin(data), 
-                boost::asio::buffers_begin(data) + headerLength - delimiter.size()
+                boost::asio::buffers_begin(data) + headerLength - HEADER_DELIMITER.size()
             };
             m_inbox.consume(headerLength);
 
@@ -159,9 +158,11 @@ namespace temp {
 
         // partially done according to [chuncks](https://datatracker.ietf.org/doc/html/rfc7230#section-4.1)
         void ReadBodyChucks() {
-            constexpr std::string_view CRLF = "\r\n";
             boost::system::error_code error;
             m_body.clear();
+            
+            assert(m_fields.at("transfer-encoding") == "chunked" && "Expect chunked encoding");
+            assert(m_body.empty() && "Body already has some content");
 
             // NOTE: read_until can and usually do read more than just content before CRLF 
             for (size_t bytes = boost::asio::read_until(*m_socket, m_inbox, CRLF, error), chunkCounter = 0; 
@@ -215,7 +216,10 @@ namespace temp {
             constexpr size_t CHUNK_SIZE = 1024;
             while (parsedContentSize < bodyExpectedSize && !error) {
                 const std::size_t smallestChunk = std::min(CHUNK_SIZE, bodyExpectedSize - parsedContentSize);
-                size_t readBytes = boost::asio::read(*m_socket, m_inbox, boost::asio::transfer_exactly(smallestChunk), error);
+                const size_t readBytes = boost::asio::read(*m_socket
+                    , m_inbox
+                    , boost::asio::transfer_exactly(smallestChunk)
+                    , error);
                 m_body.append(
                     boost::asio::buffers_begin(m_inbox.data()), 
                     boost::asio::buffers_begin(m_inbox.data()) + readBytes
@@ -240,18 +244,17 @@ namespace temp {
             assert(m_socket.has_value() && "optional of ssl socket is null");
 
             boost::system::error_code error;
-
             m_socket->shutdown(error);
             if (error) {
                 std::cout << "SSL socket called shutdown with error: " << error.message() << '\n';
+                error.clear();
             }
-            error.clear();
 
             m_socket->lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
             if (error) {
                 std::cout << "SSL underlying socket called shutdown with error: " << error.message() << '\n';
+                error.clear();
             }
-            error.clear();
             
             m_socket->lowest_layer().close(error);
             if (error) {
@@ -266,6 +269,8 @@ namespace temp {
         }
 
     private:
+        static constexpr std::string_view CRLF = "\r\n";
+
         std::shared_ptr<boost::asio::io_context> m_context;
         std::shared_ptr<ssl::context> m_sslContext;
         // Switched to optional after reading all this stuff:
@@ -282,15 +287,6 @@ namespace temp {
 }
 
 int main() {
-    std::string request = 
-    "POST /oauth/token HTTP/1.1\r\n"
-    "Host: eu.battle.net\r\n"                
-    "Content-Type: application/x-www-form-urlencoded\r\n"
-    "Authorization: Basic YTA3YmI5MGE5OTAxNGRlMjkxNjdiNDRhNzJlN2NhMzY6ZnJERTR1SnVaeWM0bXo1RU9heWxlMmROSm8xQksxM08=\r\n"
-    "Content-Length: 29\r\n"
-    "\r\n"
-    "grant_type=client_credentials";
-
     boost::system::error_code error;
     auto context = std::make_shared<boost::asio::io_context>();
     auto sslContext = std::make_shared<ssl::context>(ssl::context::method::sslv23_client);
@@ -308,6 +304,15 @@ int main() {
     }
 
     try {
+        std::string request = 
+            "POST /oauth/token HTTP/1.1\r\n"
+            "Host: eu.battle.net\r\n"                
+            "Content-Type: application/x-www-form-urlencoded\r\n"
+            "Authorization: Basic YTA3YmI5MGE5OTAxNGRlMjkxNjdiNDRhNzJlN2NhMzY6ZnJERTR1SnVaeWM0bXo1RU9heWxlMmROSm8xQksxM08=\r\n"
+            "Content-Length: 29\r\n"
+            "\r\n"
+            "grant_type=client_credentials";
+
         temp::Client client { context, sslContext };
         const char *accessTokenHost = "eu.battle.net";
         client.Connect(accessTokenHost);
@@ -332,9 +337,9 @@ int main() {
         // WORK with token
         using namespace std::literals;
         request =   
-        "GET /data/wow/token/?namespace=dynamic-eu&locale=en_US HTTP/1.1\r\n"
-        "Host: eu.api.blizzard.com\r\n"
-        "Authorization: Bearer "s + token + "\r\n\r\n";
+            "GET /data/wow/token/?namespace=dynamic-eu&locale=en_US HTTP/1.1\r\n"
+            "Host: eu.api.blizzard.com\r\n"
+            "Authorization: Bearer "s + token + "\r\n\r\n";
 
         // temp::Client client2 { context, sslContext };
         const char *apiHost = "eu.api.blizzard.com";
