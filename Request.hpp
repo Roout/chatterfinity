@@ -1,40 +1,43 @@
-// [RFC 2616 Response status line](https://datatracker.ietf.org/doc/html/rfc2616#section-6.1.1)
-// -> More about headers:
-// [Representation Header](https://developer.mozilla.org/en-US/docs/Glossary/Representation_header)
-// [Multiple-resource bodies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types#multipartform-data)
-// [RFC 7230 Message transfer, body length etc](https://datatracker.ietf.org/doc/html/rfc7230#section-3.3.3)
 #pragma once
-#include <unordered_map>
-#include <string>
 #include <string_view>
-#include <cstdint>
+#include <string>
 
 namespace blizzard {
 
-    enum class BodyContentKind {
-        chunkedTransferEncoded,
-        contentLengthSpecified,
-        unknown // may be Multiple-resource bodies
-    };
-    
-    struct Header {    
-        static constexpr std::string_view FIELD_DELIMITER = "\r\n";
-        static constexpr std::string_view HEAD_DELIMITER = "\r\n\r\n";
-        static constexpr std::string_view TRANSFER_ENCODED_KEY = "transfer-encoding";
-        static constexpr std::string_view TRANSFER_ENCODED_VALUE = "chunked";
-        static constexpr std::string_view CONTENT_LENGTH_KEY = "content-length";
+    constexpr std::string_view REGION = "eu";
+    constexpr std::string_view LOCALE = "en_US";
+    constexpr std::string_view NAMESPACE = "dynamic-classic-eu";
+    constexpr std::string_view SERVER_SLUG = "flamegor";
 
-        // status line
-        std::string m_httpVersion;
-        std::uint16_t m_statusCode;
-        std::string m_reasonPhrase;
+    class Query {
+    public:
+        virtual ~Query() = default;
 
-        // can't get rid of this property cuz it's important to confirm 
-        // it's not a `BodyContentKind::unknown` type
-        BodyContentKind m_bodyKind;
-        std::uint64_t m_bodyLength;
+        virtual std::string Build() const = 0;
     };
 
-    Header ParseHeader(std::string_view src);
+    /*
+     * 1. Get Access Token
+     * in: client_id, client_secret
+     * out: access_token, token_type, expires_in
+     **/
+    class ExchangeCredentials : public Query {
+    public:
+        ExchangeCredentials() {
+            m_id = "a07bb90a99014de29167b44a72e7ca36";
+            m_secret = "frDE4uJuZyc4mz5EOayle2dNJo1BK13O";
+        }
 
+        std::string Build() const override;
+
+    private:
+        // client credentials
+        std::string m_id;
+        std::string m_secret;
+    };
+    // 2. Server Status
+    // 3. Creature Families { wolf, ... }
+    // 4. Creature Types { Beast, Giant, ... }
+    // 5. Arena
+    // 6. Auction
 }

@@ -15,11 +15,13 @@ list(APPEND headers
 #	"Client.hpp"
 #	"Connection.hpp"
 	"Request.hpp"
+	"Response.hpp"
 )
 	
 list(APPEND sources 
 	"main.cpp"
 	"Request.cpp"
+	"Response.cpp"
 #	"Client.cpp"
 ##	"Connection.cpp"
 )

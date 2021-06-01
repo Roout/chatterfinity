@@ -15,6 +15,7 @@
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
 
+#include "Response.hpp"
 #include "Request.hpp"
 
 namespace ssl = boost::asio::ssl;
@@ -260,15 +261,7 @@ int main() {
     }
 
     try {
-        std::string request = 
-            "POST /oauth/token HTTP/1.1\r\n"
-            "Host: eu.battle.net\r\n"                
-            "Content-Type: application/x-www-form-urlencoded\r\n"
-            "Authorization: Basic YTA3YmI5MGE5OTAxNGRlMjkxNjdiNDRhNzJlN2NhMzY6ZnJERTR1SnVaeWM0bXo1RU9heWxlMmROSm8xQksxM08=\r\n"
-            "Content-Length: 29\r\n"
-            "\r\n"
-            "grant_type=client_credentials";
-
+        std::string request = blizzard::ExchangeCredentials().Build();
         temp::Client client { context, sslContext };
         const char *accessTokenHost = "eu.battle.net";
         client.Connect(accessTokenHost);

@@ -1,121 +1,73 @@
 #include "Request.hpp"
-
+#include <string>
+#include <string_view>
+#include <cstdint>
 #include <cassert>
-#include <charconv>
-#include <stdexcept>
-#include <cctype> // std::tolower
-#include <array>
+
+#include <boost/format.hpp>
 
 namespace {
- 
-    // case insensetive comparator
-    bool IsEqual(std::string_view lhs, std::string_view rhs) noexcept {
-        bool isEqual = lhs.size() == rhs.size();
-        for (size_t i = 0; isEqual && i < lhs.size(); i++) {
-            isEqual = std::tolower(lhs[i]) == std::tolower(rhs[i]); 
-        }
-        return isEqual;
-    }
-
-    constexpr std::string_view Trim(
-        std::string_view text, 
-        std::string_view exclude = " \n\r\t\v\0"
-    ) {
-        if (const size_t leftShift = text.find_first_not_of(exclude); leftShift != std::string_view::npos)
-            text.remove_prefix(leftShift); 
-        else 
-            return {};
-
-        if (const size_t rightShift = text.find_last_not_of(exclude); rightShift != std::string_view::npos)
-            text.remove_suffix(text.size() - rightShift - 1); 
-        else 
-            return {};
+    
+    // [RFC 4648 Base64 encoding](https://datatracker.ietf.org/doc/html/rfc4648#section-5)
+    class UrlBase64 {
+    public:
         
-        return text;
-    }
-
-    size_t ExtractInteger(std::string_view sequence, size_t radix = 10) {
-        using namespace std::literals;
-        size_t value;
-        const auto [parsed, ec] = std::from_chars(std::data(sequence)
-            , std::data(sequence) + std::size(sequence)
-            , value
-            , radix);
-        if (ec != std::errc()) {
-            auto message = "std::from_chars met unexpected input.\n\tBefore parsing: "s 
-                + std::string{ sequence.data(), sequence.size() } 
-                + "\n\tAfter parsing: "s 
-                + parsed;
-            throw std::logic_error(message);
+        static std::string Encode(std::string_view src) {
+            const auto length = 4 * ((src.size() + 2) / 3);
+            const auto lastOctets = src.size() % 3;
+            std::string result;
+            result.reserve(length);
+            for (size_t i = 0; i + lastOctets < src.size(); i += 3) {
+                const uint32_t merged = (src[i] << 16) | (src[i + 1] << 8) | src[i + 2];
+                result.push_back(TABLE[(merged >> 18) & 0x3F]);
+                result.push_back(TABLE[(merged >> 12) & 0x3F]);
+                result.push_back(TABLE[(merged >> 6 ) & 0x3F]);
+                result.push_back(TABLE[(merged >> 0 ) & 0x3F]);
+            }
+            if (lastOctets == 1) {
+                /*
+                (2) The final quantum of encoding input is exactly 8 bits; here, the
+                    final unit of encoded output will be two characters followed by
+                    two "=" padding characters.
+                */
+                result.push_back(TABLE[(src.back() >> 2) & 0x3F]);
+                result.push_back(TABLE[(src.back() << 4) & 0x3F]);
+                result.append("==");
+            }
+            else if (lastOctets == 2) {
+                /*
+                (3) The final quantum of encoding input is exactly 16 bits; here, the
+                    final unit of encoded output will be three characters followed by
+                    one "=" padding character.
+                */
+                const uint32_t merged = (src[src.size() - 2] << 16) | (src.back() << 8);
+                result.push_back(TABLE[(merged >> 18) & 0x3F]);
+                result.push_back(TABLE[(merged >> 12) & 0x3F]);
+                result.push_back(TABLE[(merged >> 6 ) & 0x3F]);
+                result.push_back('=');
+            }
+            return result;
         }
-        return value;
-    }
+    private:
+        static constexpr std::string_view TABLE 
+            = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=";
+        static_assert(TABLE.size() == 65);
+    };
 }
 
 namespace blizzard {
 
-Header ParseHeader(std::string_view src) {
-    constexpr auto FIELD_DELIMITER = Header::FIELD_DELIMITER;
-    constexpr std::string_view STATUS_DELIMITER = " ";
-    Header result{};
-
-    // extract STATUS
-    size_t statusEnd = src.find_first_of(FIELD_DELIMITER.data());
-    assert(statusEnd != std::string::npos && "Header doesn't have a status");
-    std::string_view statusLine { src.data(), statusEnd };
-    statusEnd += FIELD_DELIMITER.size();
-
-    std::array<std::string_view, 3> statusParts;
-    for (size_t i = 0; i < statusParts.size(); i++) {
-        if (auto last = statusLine.find_first_of(STATUS_DELIMITER); 
-            last == std::string_view::npos
-        ) {
-            statusParts[i] = statusLine;
-        }
-        else {
-            statusParts[i] = { statusLine.data(), last };
-            statusLine.remove_prefix(last + STATUS_DELIMITER.size());
-        }
-    }
-    for (auto part: statusParts) {
-        assert(Trim(part) == part && "Status parsing failed");
-    }
-
-    result.m_httpVersion = statusParts[0];
-    result.m_statusCode = static_cast<uint16_t>(ExtractInteger(statusParts[1]));
-    result.m_reasonPhrase = statusParts[2];
-    // default values:
-    result.m_bodyKind = BodyContentKind::unknown;
-    result.m_bodyLength = std::string_view::npos;
-    // extract FIELDS
-    for (size_t start = statusEnd, finish = src.find_first_of(FIELD_DELIMITER.data(), statusEnd); 
-        finish != std::string::npos && start != finish;
-        finish = src.find_first_of(FIELD_DELIMITER.data(), start)
-    ) {
-        std::string_view raw { src.data() + start, finish - start };
-        const auto split = raw.find_first_of(':');
-        assert(split != std::string_view::npos && "Expected format: <key>:<value> not found");
-
-        std::string_view key { raw.data(), split };
-        raw.remove_prefix(split + 1);
-        raw = Trim(raw, " ");
-
-        if (IsEqual(key, Header::CONTENT_LENGTH_KEY)) {
-            result.m_bodyKind = BodyContentKind::contentLengthSpecified;
-            result.m_bodyLength = ExtractInteger(raw);
-        }
-        else if (IsEqual(key, Header::TRANSFER_ENCODED_KEY) 
-            && IsEqual(raw, Header::TRANSFER_ENCODED_VALUE)         
-        ) {
-            result.m_bodyKind = BodyContentKind::chunkedTransferEncoded;
-            result.m_bodyLength = std::string_view::npos;
-        }
-
-        // update start
-        start = finish + FIELD_DELIMITER.size();
-    }
-
-    return result;
+std::string ExchangeCredentials::Build() const {
+    const char *request = 
+        "POST /oauth/token HTTP/1.1\r\n"
+        "Host: eu.battle.net\r\n"                
+        "Content-Type: application/x-www-form-urlencoded\r\n"
+        "Authorization: Basic %1%\r\n"
+        "Content-Length: 29\r\n"
+        "\r\n"
+        "grant_type=client_credentials";
+    
+    return (boost::format(request) % UrlBase64::Encode(m_id + ':' + m_secret)).str();
 }
 
 }
