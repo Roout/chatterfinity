@@ -57,17 +57,37 @@ namespace {
 
 namespace blizzard {
 
-std::string ExchangeCredentials::Build() const {
+std::string CredentialsExchange::Build() const {
     const char *request = 
         "POST /oauth/token HTTP/1.1\r\n"
-        "Host: eu.battle.net\r\n"                
+        "Host: %1%.battle.net\r\n"                
         "Content-Type: application/x-www-form-urlencoded\r\n"
-        "Authorization: Basic %1%\r\n"
+        "Authorization: Basic %2%\r\n"
         "Content-Length: 29\r\n"
         "\r\n"
         "grant_type=client_credentials";
     
-    return (boost::format(request) % UrlBase64::Encode(m_id + ':' + m_secret)).str();
+    return (boost::format(request) 
+        % REGION 
+        % UrlBase64::Encode(m_id + ':' + m_secret)
+    ).str();
+}
+
+std::string Realm::Build() const {
+    // https://eu.api.blizzard.com/data/wow/realm/plamegor?namespace=dynamic-classic-eu&locale=en_US&access_token=USJa4cAz4h0Ggw2r07wbM1IfdAIWKFAVhr
+    const char *request = 
+            "GET /data/wow/realm/%1%?namespace=%2%&locale=%3% HTTP/1.1\r\n"
+            "Host: %4%.api.blizzard.com\r\n"
+            "Authorization: Bearer %5%\r\n"
+            "\r\n";
+    
+    return (boost::format(request) 
+        % SERVER_SLUG 
+        % NAMESPACE
+        % LOCALE
+        % REGION
+        % m_token
+    ).str();
 }
 
 }

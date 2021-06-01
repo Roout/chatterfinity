@@ -253,6 +253,8 @@ int main() {
      * DigiCert High Assurance EV Root CA => DigiCert SHA2 High Assurance Server CA => *.battle.net
      * So root cert is DigiCert High Assurance EV Root CA;
      * Valid until: 10/Nov/2031
+     * 
+     * TODO: read this path from secret + with some chiper
     */
     const char *verifyFilePath = "DigiCertHighAssuranceEVRootCA.crt.pem";
     sslContext->load_verify_file(verifyFilePath, error);
@@ -261,7 +263,7 @@ int main() {
     }
 
     try {
-        std::string request = blizzard::ExchangeCredentials().Build();
+        std::string request = blizzard::CredentialsExchange().Build();
         temp::Client client { context, sslContext };
         const char *accessTokenHost = "eu.battle.net";
         client.Connect(accessTokenHost);
@@ -273,7 +275,7 @@ int main() {
         std::string body = client.GetBody();
         rapidjson::Document reader;
         reader.Parse(body.data());
-        auto token = reader["access_token"].GetString();
+        const auto token = reader["access_token"].GetString();
         const auto tokenType = reader["token_type"].GetString();
         const auto expires = reader["expires_in"].GetUint64();
 
@@ -285,11 +287,7 @@ int main() {
 
         // WORK with token
         using namespace std::literals;
-        request =   
-            "GET /data/wow/token/?namespace=dynamic-eu&locale=en_US HTTP/1.1\r\n"
-            "Host: eu.api.blizzard.com\r\n"
-            "Authorization: Bearer "s + token + "\r\n\r\n";
-
+        request = blizzard::Realm(token).Build();  
         // temp::Client client2 { context, sslContext };
         const char *apiHost = "eu.api.blizzard.com";
         client.Connect(apiHost);
