@@ -15,49 +15,21 @@
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
 
+#include "Request.hpp"
+
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
 namespace temp {
 
-    std::string AsLowerCase(std::string_view str) {
-        std::string copy { str };
-        for (auto& c: copy) c = std::tolower(c);
-        return copy;
-    }
-
-    constexpr std::string_view Trim(
-        std::string_view text, 
-        std::string_view exclude = " \n\r\t\v\0"
-    ) {
-        if (const size_t leftShift = text.find_first_not_of(exclude); 
-            leftShift != std::string_view::npos
-        ) {
-            text.remove_prefix(leftShift); 
-        }
-        else {
-            return {};
-        }
-
-        if (const size_t rightShift = text.find_last_not_of(exclude); 
-            rightShift != std::string_view::npos
-        ) {
-            text.remove_suffix(text.size() - rightShift - 1); 
-        }
-        else {
-            return {};
-        }
-        
-        return text;
-    }
-
-    size_t ExtractInteger(std::string_view sequence, size_t radix = 10) {
+    // TODO: remove
+    size_t ExtractHexInteger(std::string_view sequence) {
         using namespace std::literals;
         size_t value;
         const auto [parsed, ec] = std::from_chars(std::data(sequence)
             , std::data(sequence) + std::size(sequence)
             , value
-            , radix);
+            , 16);
         if (ec != std::errc()) {
             auto message = "std::from_chars met unexpected input.\n\tBefore parsing: "s 
                 + std::string{ sequence.data(), sequence.size() } 
@@ -112,11 +84,10 @@ namespace temp {
         void ReadHeader() {
             constexpr std::string_view HEADER_DELIMITER = "\r\n\r\n";
             
-            m_fields.clear();
             m_inbox.consume(m_inbox.size());
 
             assert(m_socket.has_value() && "optional of ssl socket is null");
-            assert(!m_inbox.size() && m_fields.empty() && "Must be empty!");
+            assert(!m_inbox.size() && "Must be empty!");
 
             boost::system::error_code error;
             const size_t headerLength = boost::asio::read_until(*m_socket, m_inbox, HEADER_DELIMITER, error);
@@ -126,34 +97,18 @@ namespace temp {
             assert(headerLength && "Read 0 bytes!");
 
             const auto data { m_inbox.data() };
-            std::string header {
+            const std::string header {
                 boost::asio::buffers_begin(data), 
                 boost::asio::buffers_begin(data) + headerLength - HEADER_DELIMITER.size()
             };
             m_inbox.consume(headerLength);
 
-            // PARSE HEADER: 
-            // extract STATUS
-            size_t statusEnd = header.find_first_of(CRLF.data());
-            assert(statusEnd != std::string::npos && "Header doesn't have a status");
-            statusEnd += CRLF.size();
-            // extract FIELDS
-            for (size_t start = statusEnd, finish = header.find_first_of(CRLF.data(), statusEnd); 
-                finish != std::string::npos && start != finish;
-                finish = header.find_first_of(CRLF.data(), start)
-            ) {
-                std::string_view raw { header.data() + start, finish - start };
-                auto split = raw.find_first_of(':');
-                std::string_view key { raw.data(), split };
-                raw.remove_prefix(split + 1);
-                m_fields.emplace(AsLowerCase(key), Trim(raw, " "));
-                // update start
-                start = finish + CRLF.size();
-            }
-            std::cout << "----> Header\n";
-            for (auto const& [key, value]: m_fields) {
-                std::cout << key << ":" << value << '\n';
-            }
+            m_header = blizzard::ParseHeader(header);
+            // TODO: Handle status code!
+            // print status line
+            std::cout << m_header.m_httpVersion << " " 
+                << m_header.m_statusCode << " " 
+                << m_header.m_reasonPhrase << '\n';
         }
 
         // partially done according to [chuncks](https://datatracker.ietf.org/doc/html/rfc7230#section-4.1)
@@ -161,7 +116,7 @@ namespace temp {
             boost::system::error_code error;
             m_body.clear();
             
-            assert(m_fields.at("transfer-encoding") == "chunked" && "Expect chunked encoding");
+            assert(m_header.m_bodyKind == blizzard::BodyContentKind::chunkedTransferEncoded);
             assert(m_body.empty() && "Body already has some content");
 
             // NOTE: read_until can and usually do read more than just content before CRLF 
@@ -182,7 +137,7 @@ namespace temp {
                 }
                 else { 
                     // chunk size
-                    const size_t chunkLength = ExtractInteger(chunk, 16);
+                    const size_t chunkLength = ExtractHexInteger(chunk);
                     std::cout << "Chunk " << chunkCounter / 2 << " size: " << chunkLength << '\n';
                 }
                 m_inbox.consume(bytes);
@@ -199,7 +154,8 @@ namespace temp {
 
         void ReadBody() {
             assert(m_socket.has_value() && "optional of ssl socket is null");
-            
+            assert(m_header.m_bodyKind == blizzard::BodyContentKind::contentLengthSpecified);
+
             const auto savedData { m_inbox.data() };
             const auto savedSize { m_inbox.size() };
             m_body.assign(
@@ -209,7 +165,7 @@ namespace temp {
             m_inbox.consume(savedSize);
 
             // size of the content I need to parse from the HTTP response
-            const size_t bodyExpectedSize = ExtractInteger(m_fields.at("content-length"));
+            const size_t bodyExpectedSize = static_cast<size_t>(m_header.m_bodyLength);
 
             boost::system::error_code error;
             auto parsedContentSize = m_body.size();
@@ -265,7 +221,7 @@ namespace temp {
         }
 
         bool IsEncoded() const {
-            return m_fields.find("transfer-encoding") != m_fields.cend();
+            return m_header.m_bodyKind == blizzard::BodyContentKind::chunkedTransferEncoded;
         }
 
     private:
@@ -281,7 +237,7 @@ namespace temp {
 
         boost::asio::streambuf m_inbox;
         // parsed
-        std::unordered_map<std::string, std::string> m_fields; 
+        blizzard::Header m_header;
         std::string m_body;
     };
 }
