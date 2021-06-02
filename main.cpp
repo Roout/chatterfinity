@@ -263,7 +263,10 @@ int main() {
     }
 
     try {
-        std::string request = blizzard::CredentialsExchange().Build();
+        std::string request = blizzard::CredentialsExchange(
+            "a07bb90a99014de29167b44a72e7ca36"
+            , "frDE4uJuZyc4mz5EOayle2dNJo1BK13O"
+        ).Build();
         temp::Client client { context, sslContext };
         const char *accessTokenHost = "eu.battle.net";
         client.Connect(accessTokenHost);
@@ -286,9 +289,7 @@ int main() {
         std::cout << "Extracted token: [" << token << "]\n";
 
         // WORK with token
-        using namespace std::literals;
         request = blizzard::Realm(token).Build();  
-        // temp::Client client2 { context, sslContext };
         const char *apiHost = "eu.api.blizzard.com";
         client.Connect(apiHost);
         
@@ -300,7 +301,11 @@ int main() {
         else {
             client.ReadBody();
         }
-        
+        body = client.GetBody();
+        reader.Parse(body.data());
+        const auto realmId = reader["id"].GetUint64();
+
+        request = blizzard::RealmStatus(realmId, token).Build();  
         client.Write(request);
         client.ReadHeader();
         if (client.IsEncoded()) {
