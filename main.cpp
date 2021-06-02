@@ -17,29 +17,12 @@
 
 #include "Response.hpp"
 #include "Request.hpp"
+#include "Utility.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
 namespace temp {
-
-    // TODO: remove
-    size_t ExtractHexInteger(std::string_view sequence) {
-        using namespace std::literals;
-        size_t value;
-        const auto [parsed, ec] = std::from_chars(std::data(sequence)
-            , std::data(sequence) + std::size(sequence)
-            , value
-            , 16);
-        if (ec != std::errc()) {
-            auto message = "std::from_chars met unexpected input.\n\tBefore parsing: "s 
-                + std::string{ sequence.data(), sequence.size() } 
-                + "\n\tAfter parsing: "s 
-                + parsed;
-            throw std::logic_error(message);
-        }
-        return value;
-    }
 
     class Client {
     public:
@@ -138,7 +121,7 @@ namespace temp {
                 }
                 else { 
                     // chunk size
-                    const size_t chunkLength = ExtractHexInteger(chunk);
+                    const size_t chunkLength = Utils::ExtractInteger(chunk, 16);
                     std::cout << "Chunk " << chunkCounter / 2 << " size: " << chunkLength << '\n';
                 }
                 m_inbox.consume(bytes);

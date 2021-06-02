@@ -1,4 +1,5 @@
 #include "Response.hpp"
+#include "Utility.hpp"
 
 #include <cassert>
 #include <charconv>
@@ -33,23 +34,6 @@ namespace {
         
         return text;
     }
-
-    size_t ExtractInteger(std::string_view sequence, size_t radix = 10) {
-        using namespace std::literals;
-        size_t value;
-        const auto [parsed, ec] = std::from_chars(std::data(sequence)
-            , std::data(sequence) + std::size(sequence)
-            , value
-            , radix);
-        if (ec != std::errc()) {
-            auto message = "std::from_chars met unexpected input.\n\tBefore parsing: "s 
-                + std::string{ sequence.data(), sequence.size() } 
-                + "\n\tAfter parsing: "s 
-                + parsed;
-            throw std::logic_error(message);
-        }
-        return value;
-    }
 }
 
 namespace blizzard {
@@ -82,7 +66,7 @@ Header ParseHeader(std::string_view src) {
     }
 
     result.m_httpVersion = statusParts[0];
-    result.m_statusCode = static_cast<uint16_t>(ExtractInteger(statusParts[1]));
+    result.m_statusCode = static_cast<uint16_t>(Utils::ExtractInteger(statusParts[1]));
     result.m_reasonPhrase = statusParts[2];
     // default values:
     result.m_bodyKind = BodyContentKind::unknown;
@@ -102,7 +86,7 @@ Header ParseHeader(std::string_view src) {
 
         if (IsEqual(key, Header::CONTENT_LENGTH_KEY)) {
             result.m_bodyKind = BodyContentKind::contentLengthSpecified;
-            result.m_bodyLength = ExtractInteger(raw);
+            result.m_bodyLength = Utils::ExtractInteger(raw);
         }
         else if (IsEqual(key, Header::TRANSFER_ENCODED_KEY) 
             && IsEqual(raw, Header::TRANSFER_ENCODED_VALUE)         
