@@ -66,7 +66,7 @@ Header ParseHeader(std::string_view src) {
     }
 
     result.m_httpVersion = statusParts[0];
-    result.m_statusCode = static_cast<uint16_t>(Utils::ExtractInteger(statusParts[1]));
+    result.m_statusCode = static_cast<uint16_t>(utils::ExtractInteger(statusParts[1]));
     result.m_reasonPhrase = statusParts[2];
     // default values:
     result.m_bodyKind = BodyContentKind::unknown;
@@ -86,7 +86,7 @@ Header ParseHeader(std::string_view src) {
 
         if (IsEqual(key, Header::CONTENT_LENGTH_KEY)) {
             result.m_bodyKind = BodyContentKind::contentLengthSpecified;
-            result.m_bodyLength = Utils::ExtractInteger(raw);
+            result.m_bodyLength = utils::ExtractInteger(raw);
         }
         else if (IsEqual(key, Header::TRANSFER_ENCODED_KEY) 
             && IsEqual(raw, Header::TRANSFER_ENCODED_VALUE)         
