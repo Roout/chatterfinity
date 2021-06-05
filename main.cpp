@@ -121,7 +121,7 @@ namespace temp {
                 }
                 else { 
                     // chunk size
-                    const size_t chunkLength = Utils::ExtractInteger(chunk, 16);
+                    const size_t chunkLength = utils::ExtractInteger(chunk, 16);
                     std::cout << "Chunk " << chunkCounter / 2 << " size: " << chunkLength << '\n';
                 }
                 m_inbox.consume(bytes);

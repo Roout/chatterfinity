@@ -8,55 +8,88 @@
 #include <boost/asio/ssl.hpp>
 
 #include "Logger.hpp"
-#include "SwitchBuffer.hpp"
+#include "Response.hpp"
 
-class Client;
+using boost::asio::ip::tcp;
+namespace ssl = boost::asio::ssl;
 
 class Connection : 
     public std::enable_shared_from_this<Connection> 
 {
 public:
-    Connection(std::size_t id
-        , std::weak_ptr<Client> client
-        , std::shared_ptr<Log> log
-        , std::shared_ptr<boost::asio::io_context> context
-        , std::shared_ptr<boost::asio::ssl::context>
+    using io_context_pointer = std::shared_ptr<boost::asio::io_context>;
+    using ssl_context_pointer = std::shared_ptr<boost::asio::ssl::context>;
+
+    Connection(io_context_pointer
+        , ssl_context_pointer
+        , size_t id
+        , std::string_view host
     );
 
-    void Start(const char *address, const char *protocol);
+    Connection(Connection&&) = delete;
+    Connection& operator=(Connection&&) = delete;
+    Connection(Connection const&) = delete;
+    Connection& operator=(Connection const&) = delete;
+    ~Connection() { Close(); }
 
-    // not thread-safe
+    void Close();
+
     void Write(std::string text);
 
-    void Read();
-
 private:
+
+    void ReadHeader();
 
     void WriteBuffer();
 
-    void OnConnect(const boost::system::error_code& error, const boost::asio::ip::tcp::endpoint& endpoint);
+    void OnResolve(const boost::system::error_code& error, tcp::resolver::results_type results);
 
-    void OnWrite(const boost::system::error_code& error, std::size_t bytes);
+    void OnConnect(const boost::system::error_code& error, const tcp::endpoint& endpoint);
 
-    void OnRead(const boost::system::error_code& error, std::size_t bytes);
+    void OnHandshake(const boost::system::error_code& error);
 
-    void Shutdown();
+    void OnWrite(const boost::system::error_code& error, size_t bytes);
 
-    void Handshake();
+    void OnHeaderRead(const boost::system::error_code& error, size_t bytes);
+
+    void ReadIntactBody();
+
+    void OnReadIntactBody(const boost::system::error_code& error, size_t bytes);
+
+    void ReadChunkedBody();
+
+    void OnReadChunkedBody(const boost::system::error_code& error, size_t bytes);
 
 private:
-    const std::string_view DELIMITER { "\r\n\r\n" };
+    struct Chunk {
+        // size of chunk
+        size_t m_size { 0 };
+        // number of consumed (processed) chunks
+        size_t m_consumed { 0 }; 
 
-    const std::size_t m_id { 0 };
-    std::shared_ptr<Log> m_log { nullptr };
-    std::weak_ptr<Client> m_client;
+        void Reset() noexcept {
+            m_size = m_consumed = 0;
+        }
+    };
 
-    std::shared_ptr<boost::asio::io_context> m_context { nullptr };
-    std::shared_ptr<boost::asio::ssl::context> m_sslContext { nullptr };
-    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;
+    static constexpr std::string_view kService { "https" };
+    static constexpr std::string_view kCRLF { "\r\n" };
+    static constexpr std::string_view kHeaderDelimiter { "\r\n\r\n" };
+
+    io_context_pointer m_context { nullptr };
+    ssl_context_pointer m_sslContext { nullptr };
+    tcp::resolver m_resolver;
     boost::asio::io_context::strand m_strand;
+    ssl::stream<tcp::socket> m_socket;
     
+    const size_t m_id { 0 };
+    const std::string m_host {};
+    std::shared_ptr<Log> m_log { nullptr };
+
     boost::asio::streambuf m_inbox;
-    SwitchBuffer m_outbox;
-    bool m_isIdle { true };
+    blizzard::Header m_header;
+    Chunk m_chunk;
+    std::string m_body;
+
+    std::string m_outbox;
 };
