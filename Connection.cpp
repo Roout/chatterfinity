@@ -1,12 +1,11 @@
 #include "Connection.hpp"
+#include "Utility.hpp"
 
 #include <cassert>
 #include <functional>
 #include <algorithm>
 
 #include <boost/format.hpp>
-
-using boost::asio::ip::tcp;
 
 Connection::Connection(io_context_pointer context
     , ssl_context_pointer sslContext
@@ -166,6 +165,8 @@ void Connection::OnHeaderRead(const boost::system::error_code& error, size_t byt
         using blizzard::BodyContentKind;
         switch(m_header.m_bodyKind) {
             case BodyContentKind::chunkedTransferEncoded: {
+                m_body.clear();
+                m_chunk.Reset();
                 ReadChunkedBody(); 
             } break;
             case BodyContentKind::contentLengthSpecified: {
@@ -186,11 +187,56 @@ void Connection::OnHeaderRead(const boost::system::error_code& error, size_t byt
 }
 
 void Connection::ReadChunkedBody() {
-    assert(false && "TODO: implement ReadChunkedBody");
+    assert(m_header.m_bodyKind == blizzard::BodyContentKind::chunkedTransferEncoded);
+
+    boost::asio::async_read_until(m_socket
+        , m_inbox
+        , kCRLF
+        , boost::asio::bind_executor(m_strand
+            , std::bind(&Connection::OnReadChunkedBody, 
+                this->shared_from_this(), 
+                std::placeholders::_1, 
+                std::placeholders::_2
+            )
+        )
+    );
 }
 
 void Connection::OnReadChunkedBody(const boost::system::error_code& error, size_t bytes) {
-    assert(false && "TODO: implement OnReadChunkedBody");
+    if (error && error != boost::asio::error::eof) {
+        m_log->Write(LogType::error, m_id, "failed OnReadChunkedBody", error.message(), "\n");
+        this->Close();
+        return;
+    } 
+    if (error == boost::asio::error::eof) {
+        m_log->Write(LogType::warning, m_id, "failed OnReadChunkedBody meet EOF", error.message(), "\n");
+    }
+
+    m_log->Write(LogType::info, m_id, "OnReadChunkedBody read", bytes, "bytes.\n");
+    const auto data = m_inbox.data();
+    std::string chunk {
+        boost::asio::buffers_begin(data), 
+        boost::asio::buffers_begin(data) + bytes - kCRLF.size()
+    };
+    m_inbox.consume(bytes);
+    if (m_chunk.m_consumed & 1) { 
+        // chunk content
+        m_log->Write(LogType::info, m_id, "chunk:", m_chunk.m_consumed / 2, ":", chunk, '\n');
+        if (!m_chunk.m_size) {
+            // This is the last part of 0 chunk so notify about that subscribers
+            // Body has been already read
+            m_log->Write(LogType::info, m_id, "read body:\n", m_body, '\n');
+            return;
+        };
+        m_body.append(chunk);
+    }
+    else { 
+        // chunk size
+        m_chunk.m_size = utils::ExtractInteger(chunk, 16);
+        m_log->Write(LogType::info, m_id, "chunk:", m_chunk.m_consumed / 2, "of size", m_chunk.m_size, '\n');
+    }
+    // read next line
+    ReadChunkedBody();
 }
 
 void Connection::ReadIntactBody() {
@@ -220,7 +266,16 @@ void Connection::ReadIntactBody() {
 }
 
 void Connection::OnReadIntactBody(const boost::system::error_code& error, size_t bytes) {
-
+    if (error && error != boost::asio::error::eof) {
+        m_log->Write(LogType::error, m_id, "failed OnReadIntactBody", error.message(), "\n");
+        this->Close();
+        return;
+    } 
+    if (error == boost::asio::error::eof) {
+        m_log->Write(LogType::warning, m_id, "failed OnReadIntactBody meet EOF", error.message(), "\n");
+    }
+    m_log->Write(LogType::info, m_id, "OnReadIntactBody read", bytes, "bytes.\n");
+    ReadIntactBody();
 }
 
 void Connection::Close() {
