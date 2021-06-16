@@ -36,7 +36,7 @@ namespace {
     }
 }
 
-namespace blizzard {
+namespace net::http {
 
 Header ParseHeader(std::string_view src) {
     constexpr auto FIELD_DELIMITER = Header::FIELD_DELIMITER;

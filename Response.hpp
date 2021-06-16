@@ -8,9 +8,9 @@
 #include <string_view>
 #include <cstdint>
 
-namespace blizzard {
+namespace net::http {
 
-    enum class BodyContentKind {
+    enum class BodyContentKind : std::uint16_t {
         chunkedTransferEncoded,
         contentLengthSpecified,
         unknown // may be Multiple-resource bodies
@@ -24,17 +24,23 @@ namespace blizzard {
         static constexpr std::string_view CONTENT_LENGTH_KEY = "content-length";
 
         // status line
-        std::string m_httpVersion;
-        std::uint16_t m_statusCode;
-        std::string m_reasonPhrase;
+        std::string     m_httpVersion;
+        std::string     m_reasonPhrase;
+        std::uint16_t   m_statusCode;
 
         // can't get rid of this property cuz it's important to confirm 
         // it's not a `BodyContentKind::unknown` type
         BodyContentKind m_bodyKind;
-        std::uint64_t m_bodyLength;
+        std::uint64_t   m_bodyLength;
     };
 
     Header ParseHeader(std::string_view src);
+    
+    using Body = std::string;
 
+    struct Message {
+        Header  m_header;
+        Body    m_body;
+    };
     
 }
