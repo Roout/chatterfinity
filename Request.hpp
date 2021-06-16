@@ -5,13 +5,13 @@
 
 namespace blizzard {
 
-    constexpr std::string_view SERVER_SLUG = "flamegor";
-    constexpr std::string_view NAMESPACE = "dynamic-classic-eu";
-    constexpr std::string_view LOCALE = "en_US";
-    constexpr std::string_view REGION = "eu";
+    constexpr std::string_view SERVER_SLUG  = "flamegor";
+    constexpr std::string_view NAMESPACE    = "dynamic-classic-eu";
+    constexpr std::string_view LOCALE       = "en_US";
+    constexpr std::string_view REGION       = "eu";
 
-    static_assert(NAMESPACE[NAMESPACE.size() - 2] == REGION[0]
-        && NAMESPACE.back() == REGION.back()
+    static_assert(
+        NAMESPACE[NAMESPACE.size() - 2] == REGION[0] && NAMESPACE.back() == REGION.back()
         , "Region mismatch"
     );
 
