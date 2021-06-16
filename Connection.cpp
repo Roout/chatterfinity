@@ -26,8 +26,17 @@ Connection::Connection(io_context_pointer context
     m_socket.set_verify_callback(ssl::rfc2818_verification(host.data()));
 }
 
-void Connection::Write(std::string text) {
+Connection::~Connection() { 
+    Close(); 
+}
+
+net::http::Message Connection::AcquireResponse() noexcept {
+    return { std::move(m_header), std::move(m_body) };
+}
+
+void Connection::Write(std::string text, std::function<void()> onSuccess) {
     m_outbox = std::move(text);
+    m_onSuccess = std::move(onSuccess);
     m_resolver.async_resolve(m_host
         , kService
         , boost::asio::bind_executor(m_strand
@@ -152,7 +161,7 @@ void Connection::OnHeaderRead(const boost::system::error_code& error, size_t byt
             boost::asio::buffers_begin(data) + bytes - kHeaderDelimiter.size()
         };        
         m_inbox.consume(bytes);
-        m_header = blizzard::ParseHeader(header);
+        m_header = net::http::ParseHeader(header);
         // TODO: Handle status code!
         // print status line
         m_log->Write(LogType::info, m_id
@@ -160,10 +169,10 @@ void Connection::OnHeaderRead(const boost::system::error_code& error, size_t byt
             , m_header.m_statusCode
             , m_header.m_reasonPhrase, '\n'
         );
-        assert(m_header.m_bodyKind != blizzard::BodyContentKind::unknown);
+        assert(m_header.m_bodyKind != net::http::BodyContentKind::unknown);
         
-        using blizzard::BodyContentKind;
-        switch(m_header.m_bodyKind) {
+        using net::http::BodyContentKind;
+        switch (m_header.m_bodyKind) {
             case BodyContentKind::chunkedTransferEncoded: {
                 m_body.clear();
                 m_chunk.Reset();
@@ -187,7 +196,7 @@ void Connection::OnHeaderRead(const boost::system::error_code& error, size_t byt
 }
 
 void Connection::ReadChunkedBody() {
-    assert(m_header.m_bodyKind == blizzard::BodyContentKind::chunkedTransferEncoded);
+    assert(m_header.m_bodyKind == net::http::BodyContentKind::chunkedTransferEncoded);
 
     boost::asio::async_read_until(m_socket
         , m_inbox
@@ -222,10 +231,14 @@ void Connection::OnReadChunkedBody(const boost::system::error_code& error, size_
     if (m_chunk.m_consumed & 1) { 
         // chunk content
         m_log->Write(LogType::info, m_id, "chunk:", m_chunk.m_consumed / 2, ":", chunk, '\n');
+        m_chunk.m_consumed++;
         if (!m_chunk.m_size) {
             // This is the last part of 0 chunk so notify about that subscribers
             // Body has been already read
             m_log->Write(LogType::info, m_id, "read body:\n", m_body, '\n');
+            if (m_onSuccess) {
+                std::invoke(m_onSuccess);
+            }
             return;
         };
         m_body.append(chunk);
@@ -233,6 +246,7 @@ void Connection::OnReadChunkedBody(const boost::system::error_code& error, size_
     else { 
         // chunk size
         m_chunk.m_size = utils::ExtractInteger(chunk, 16);
+        m_chunk.m_consumed++;
         m_log->Write(LogType::info, m_id, "chunk:", m_chunk.m_consumed / 2, "of size", m_chunk.m_size, '\n');
     }
     // read next line
@@ -240,7 +254,7 @@ void Connection::OnReadChunkedBody(const boost::system::error_code& error, size_
 }
 
 void Connection::ReadIntactBody() {
-    assert(m_header.m_bodyKind == blizzard::BodyContentKind::chunkedTransferEncoded);
+    assert(m_header.m_bodyKind == net::http::BodyContentKind::chunkedTransferEncoded);
     static constexpr size_t kChunkSize = 1024;
     // size of the content I need to parse from the HTTP response
     const auto bodyExpectedSize = static_cast<size_t>(m_header.m_bodyLength);
@@ -262,6 +276,9 @@ void Connection::ReadIntactBody() {
     else {
         // NOTIFY that we have read body sucessfully
         m_log->Write(LogType::info, m_id, "read intact body:", m_body, '\n');
+        if (m_onSuccess) {
+            std::invoke(m_onSuccess);
+        }
     }
 }
 

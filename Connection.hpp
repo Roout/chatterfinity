@@ -3,6 +3,7 @@
 #include <string_view>
 #include <string>
 #include <memory>
+#include <functional>
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -30,11 +31,13 @@ public:
     Connection& operator=(Connection&&) = delete;
     Connection(Connection const&) = delete;
     Connection& operator=(Connection const&) = delete;
-    ~Connection() { Close(); }
+    ~Connection();
 
     void Close();
 
-    void Write(std::string text);
+    void Write(std::string text, std::function<void()> onSuccess = {});
+
+    net::http::Message AcquireResponse() noexcept;
 
 private:
 
@@ -76,20 +79,25 @@ private:
     static constexpr std::string_view kCRLF { "\r\n" };
     static constexpr std::string_view kHeaderDelimiter { "\r\n\r\n" };
 
+    // === Boost IO stuff ===
     io_context_pointer m_context { nullptr };
     ssl_context_pointer m_sslContext { nullptr };
     tcp::resolver m_resolver;
     boost::asio::io_context::strand m_strand;
     ssl::stream<tcp::socket> m_socket;
     
+    // === Connection details === 
     const size_t m_id { 0 };
     const std::string m_host {};
     std::shared_ptr<Log> m_log { nullptr };
+    std::function<void()> m_onSuccess;
 
+    // === Read ===
     boost::asio::streambuf m_inbox;
-    blizzard::Header m_header;
+    net::http::Header m_header;
     Chunk m_chunk;
-    std::string m_body;
+    net::http::Body m_body;
 
+    // === Write ===
     std::string m_outbox;
 };
