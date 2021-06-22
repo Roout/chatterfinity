@@ -63,6 +63,10 @@ private:
 
     void OnReadChunkedBody(const boost::system::error_code& error, size_t bytes);
 
+    // TODO: temporary stuff; used while the exception system/error handling is not implemented
+    // Just `post` `Connection::Close` through `strand`
+    void InitiateSocketShutdown();
+
 private:
     struct Chunk {
         // size of chunk
