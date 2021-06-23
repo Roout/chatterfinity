@@ -88,6 +88,10 @@ namespace temp {
             std::cout << "dtor!\n";
         }
 
+        void ResetWork() {
+            m_work.reset();
+        }
+
         void Run() {
             std::vector<std::thread> threads;
             for (size_t i = 0; i < kThreads; i++) {
@@ -108,19 +112,75 @@ namespace temp {
             for (auto&& t: threads) t.join();
         }
 
+        void QueryRealm(std::function<void(size_t id)> continuation = {}) const {
+            const char * const host = "eu.api.blizzard.com";
+            auto request = blizzard::Realm(m_token.Get()).Build();
+            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), host);
+
+            connection->Write(request, [self = weak_from_this()
+                , callback = std::move(continuation)
+                , connection = connection->weak_from_this()
+            ]() mutable {
+                if (auto origin = connection.lock(); origin) {
+                    const auto [head, body] = origin->AcquireResponse();
+                    rapidjson::Document reader; 
+                    reader.Parse(body.data(), body.size());
+                    const auto realmId = reader["id"].GetUint64();
+
+                    if (auto service = self.lock(); service) {
+                        // TODO: remove this mutex and print to log file
+                        {
+                            std::lock_guard<std::mutex> lock { service->m_outputMutex };
+                            std::cout << "Realm id: [" << realmId << "]\n";
+                        }
+                        if (callback) { // TODO: Decide whether to abandon this approach and use observer pattern for token!
+                            boost::asio::post(*service->m_context, std::bind(callback, realmId));
+                        }
+                    }
+                }
+                else {
+                    assert(false && "Unreachable. For now you can invoke this function only synchroniously");
+                }
+            });
+        }
+
+        void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {}) const {
+            const char * const host = "eu.api.blizzard.com";
+            auto request = blizzard::RealmStatus(realmId, m_token.Get()).Build();
+            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), host);
+
+            connection->Write(request, [self = weak_from_this()
+                , callback = std::move(continuation)
+                , connection = connection->weak_from_this()
+            ]() mutable {
+                if (auto origin = connection.lock(); origin) {
+                    const auto [head, body] = origin->AcquireResponse();
+
+                    if (auto service = self.lock(); service) {
+                        // TODO: remove this mutex and print to log file
+                        {
+                            std::lock_guard<std::mutex> lock { service->m_outputMutex };
+                            std::cout << "Body:\n" << body << "\n";
+                        }
+                        if (callback) { // TODO: Decide whether to abandon this approach and use observer pattern for token!
+                            boost::asio::post(*service->m_context, callback);
+                        }
+                    }
+                }
+                else {
+                    assert(false && "Unreachable. For now you can invoke this function only synchroniously");
+                }
+            });
+        }
+
         void AcquireToken(std::function<void()> continuation = {}) {
-            std::string request = blizzard::CredentialsExchange(
+            auto request = blizzard::CredentialsExchange(
                 "a07bb90a99014de29167b44a72e7ca36", "frDE4uJuZyc4mz5EOayle2dNJo1BK13O"
             ).Build();
-            const char *accessTokenHost = "eu.battle.net";
-            const size_t id = 0;
-            auto connection = std::make_shared<Connection>(m_context, m_sslContext, id, accessTokenHost);
+            const char *host = "eu.battle.net";
+            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), host);
 
-            auto weak = weak_from_this();
-            const auto count = weak.use_count();
-
-
-            connection->Write(request, [self = weak
+            connection->Write(request, [self = weak_from_this()
                 , callback = std::move(continuation)
                 , connection = connection->weak_from_this()
             ]() mutable {
@@ -158,6 +218,10 @@ namespace temp {
         }
 
     private:
+        size_t GenerateId() const {
+            return Blizzard::lastId++;
+        }
+
         using Work_t = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
 
         static constexpr size_t kThreads { 2 };
@@ -166,6 +230,8 @@ namespace temp {
         std::shared_ptr<boost::asio::io_context> m_context;
         std::shared_ptr<ssl::context> m_sslContext;
         Work_t m_work;
+
+        static inline size_t lastId { 0 };
     };
 }
 
@@ -191,13 +257,13 @@ int main() {
         std::cout << "[ERROR]: " << error.message() << '\n';
     }
 
-    // // WORK with token
-    // auto req = blizzard::Realm(token).Build();  
-    // const char *apiHost = "eu.api.blizzard.com";
-
     try {
-        blizzardService->AcquireToken([](){
-            std::cout << "Fuck!\n";
+        blizzardService->AcquireToken([blizzardService]() {
+            blizzardService->QueryRealm([blizzardService](size_t realmId) {
+                blizzardService->QueryRealmStatus(realmId, [blizzardService](){
+                    blizzardService->ResetWork();
+                });
+            });
         });
         blizzardService->Run();
     }
