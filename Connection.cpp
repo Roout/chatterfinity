@@ -29,7 +29,8 @@ Connection::Connection(io_context_pointer context
 Connection::~Connection() { 
     // No need to call `close` through executor via `boost::asio::post(...)`
     // because last instance of `shared_ptr` is already destroyed
-    Close(); 
+    Close();
+    m_log->Write(LogType::info, "Connection destroyed\n"); 
 }
 
 void Connection::InitiateSocketShutdown() {
