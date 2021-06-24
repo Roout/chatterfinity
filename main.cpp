@@ -19,55 +19,52 @@
 #include "Request.hpp"
 #include "Utility.hpp"
 #include "Connection.hpp"
+#include "Token.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
 namespace temp {
 
-    namespace chrono = std::chrono;
+    struct Config {
+        std::string id_;
+        std::string secret_;
 
-    class Token {
+        static constexpr std::string_view kConfigPath = "secret/secrets.cfg";
+        static constexpr char kDelimiter = ':';
+
     public:
-        using TimePoint_t = chrono::time_point<chrono::steady_clock>;
-        using Duration_t = chrono::seconds;
+        void Read() {
+            std::ifstream in(kConfigPath.data());
+            if (!in.is_open()) {
+                throw std::exception("Failed to open config file");
+            }
+            std::string buffer;
+            while (getline(in, buffer)) {
+                const auto delimiter = buffer.find(kDelimiter);
+                if (delimiter == std::string::npos) {
+                    throw std::exception("Wrong config file format");
+                }
 
-        Token() 
-            : content_ {}
-            , update_ { chrono::steady_clock::now() }
-            , duration_ { 0 }
-        {}
-
-        Token(std::string token, Duration_t expireTime) 
-            : content_ { std::move(token) }
-            , update_ { chrono::steady_clock::now() }
-            , duration_ { expireTime }
-        {}
-
-        void Emplace(std::string token, Duration_t expireTime) noexcept {
-            std::lock_guard<std::mutex> lock{ mutex_ };
-            content_ = std::move(token);
-            update_ = chrono::steady_clock::now();
-            duration_ = expireTime;
+                std::string_view key { buffer.data(), delimiter };
+                key = utils::Trim(key, " \"\n");
+                std::string_view value { buffer.data() + delimiter + 1 };
+                value = utils::Trim(value, " \"\n");
+                
+                if (utils::IsEqual(key, "id")) {
+                    id_.assign(value.data(), value.size());
+                }
+                else if (utils::IsEqual(key, "secret")) {
+                    secret_.assign(value.data(), value.size());
+                }
+                else {
+                    assert(false && "Unreachable: unexcpected key");
+                }
+            }
+            assert(!id_.empty());
+            assert(!secret_.empty());
         }
 
-        bool IsValid() const noexcept {
-            const auto now = chrono::steady_clock::now();
-            std::lock_guard<std::mutex> lock{ mutex_ };
-            return chrono::duration_cast<Duration_t>(now - update_) < duration_;
-        }
-
-        std::string Get() const {
-            std::lock_guard<std::mutex> lock{ mutex_ };
-            return content_;
-        }
-
-    private:
-
-        std::string content_ {};
-        TimePoint_t update_ { chrono::steady_clock::now() };
-        Duration_t  duration_ { 0 };
-        mutable std::mutex  mutex_;
     };
 
     class Blizzard : public std::enable_shared_from_this<Blizzard> {
@@ -85,7 +82,8 @@ namespace temp {
         Blizzard& operator=(Blizzard&&) = delete;
 
         ~Blizzard() {
-            std::cout << "dtor!\n";
+            std::lock_guard<std::mutex> lock { m_outputMutex };
+            std::cout << "~Blizzard()\n";
         }
 
         void ResetWork() {
@@ -112,10 +110,10 @@ namespace temp {
             for (auto&& t: threads) t.join();
         }
 
-        void QueryRealm(std::function<void(size_t id)> continuation = {}) const {
-            const char * const host = "eu.api.blizzard.com";
+        void QueryRealm(std::function<void(size_t realmId)> continuation = {}) const {
+            const char * const kHost = "eu.api.blizzard.com";
             auto request = blizzard::Realm(m_token.Get()).Build();
-            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), host);
+            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), kHost);
 
             connection->Write(request, [self = weak_from_this()
                 , callback = std::move(continuation)
@@ -145,9 +143,9 @@ namespace temp {
         }
 
         void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {}) const {
-            const char * const host = "eu.api.blizzard.com";
+            constexpr char * const kHost = "eu.api.blizzard.com";
             auto request = blizzard::RealmStatus(realmId, m_token.Get()).Build();
-            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), host);
+            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), kHost);
 
             connection->Write(request, [self = weak_from_this()
                 , callback = std::move(continuation)
@@ -174,11 +172,11 @@ namespace temp {
         }
 
         void AcquireToken(std::function<void()> continuation = {}) {
-            auto request = blizzard::CredentialsExchange(
-                "a07bb90a99014de29167b44a72e7ca36", "frDE4uJuZyc4mz5EOayle2dNJo1BK13O"
-            ).Build();
-            const char *host = "eu.battle.net";
-            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), host);
+            m_config.Read();
+            auto request = blizzard::CredentialsExchange(m_config.id_, m_config.secret_).Build();
+
+            constexpr char * const kHost = "eu.battle.net";
+            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), kHost);
 
             connection->Write(request, [self = weak_from_this()
                 , callback = std::move(continuation)
@@ -218,11 +216,12 @@ namespace temp {
         }
 
     private:
+        using Work_t = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
+        
         size_t GenerateId() const {
             return Blizzard::lastId++;
         }
 
-        using Work_t = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
 
         static constexpr size_t kThreads { 2 };
         mutable std::mutex m_outputMutex;
@@ -231,6 +230,9 @@ namespace temp {
         std::shared_ptr<ssl::context> m_sslContext;
         Work_t m_work;
 
+        Config m_config;
+
+        // connection id
         static inline size_t lastId { 0 };
     };
 }
