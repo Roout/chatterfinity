@@ -11,6 +11,7 @@ set(sources)
 
 list(APPEND headers
 	"Connection.hpp"
+	"Token.hpp"
 	"Request.hpp"
 	"Response.hpp"
 	"Utility.hpp"
@@ -64,6 +65,7 @@ target_compile_options(${This} PRIVATE
 # copy *.pem to folder with binary
 set(Configs
   "DigiCertHighAssuranceEVRootCA.crt.pem"
+  "secret/secrets.cfg"
 )
 
 foreach(config ${Configs})
