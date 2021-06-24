@@ -131,7 +131,7 @@ namespace temp {
                             std::lock_guard<std::mutex> lock { service->m_outputMutex };
                             std::cout << "Realm id: [" << realmId << "]\n";
                         }
-                        if (callback) { // TODO: Decide whether to abandon this approach and use observer pattern for token!
+                        if (callback) {
                             boost::asio::post(*service->m_context, std::bind(callback, realmId));
                         }
                     }
@@ -160,7 +160,7 @@ namespace temp {
                             std::lock_guard<std::mutex> lock { service->m_outputMutex };
                             std::cout << "Body:\n" << body << "\n";
                         }
-                        if (callback) { // TODO: Decide whether to abandon this approach and use observer pattern for token!
+                        if (callback) {
                             boost::asio::post(*service->m_context, callback);
                         }
                     }
@@ -203,7 +203,7 @@ namespace temp {
                         }
                         service->m_token.Emplace(std::move(token), Token::Duration_t(expires));
 
-                        if (callback) { // TODO: Decide whether to abandon this approach and use observer pattern for token!
+                        if (callback) {
                             boost::asio::post(*service->m_context, callback);
                         }
                     }
@@ -239,10 +239,8 @@ namespace temp {
 
 int main() {
     boost::system::error_code error;
-    // auto context = std::make_shared<boost::asio::io_context>();
     auto sslContext = std::make_shared<ssl::context>(ssl::context::method::sslv23_client);
     auto blizzardService = std::make_shared<temp::Blizzard>(sslContext);
-    // auto work = boost::asio::executor_work_guard(context->get_executor());
 
     /**
      * [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
