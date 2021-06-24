@@ -2,39 +2,7 @@
 #include "Utility.hpp"
 
 #include <cassert>
-#include <charconv>
-#include <stdexcept>
-#include <cctype> // std::tolower
 #include <array>
-
-namespace {
- 
-    // case insensetive comparator
-    bool IsEqual(std::string_view lhs, std::string_view rhs) noexcept {
-        bool isEqual = lhs.size() == rhs.size();
-        for (size_t i = 0; isEqual && i < lhs.size(); i++) {
-            isEqual = std::tolower(lhs[i]) == std::tolower(rhs[i]); 
-        }
-        return isEqual;
-    }
-
-    constexpr std::string_view Trim(
-        std::string_view text, 
-        std::string_view exclude = " \n\r\t\v\0"
-    ) {
-        if (const size_t leftShift = text.find_first_not_of(exclude); leftShift != std::string_view::npos)
-            text.remove_prefix(leftShift); 
-        else 
-            return {};
-
-        if (const size_t rightShift = text.find_last_not_of(exclude); rightShift != std::string_view::npos)
-            text.remove_suffix(text.size() - rightShift - 1); 
-        else 
-            return {};
-        
-        return text;
-    }
-}
 
 namespace net::http {
 
@@ -62,7 +30,7 @@ Header ParseHeader(std::string_view src) {
         }
     }
     for (auto part: statusParts) {
-        assert(Trim(part) == part && "Status parsing failed");
+        assert(utils::Trim(part) == part && "Status parsing failed");
     }
 
     result.m_httpVersion = statusParts[0];
@@ -82,14 +50,14 @@ Header ParseHeader(std::string_view src) {
 
         std::string_view key { raw.data(), split };
         raw.remove_prefix(split + 1);
-        raw = Trim(raw, " ");
+        raw = utils::Trim(raw, " ");
 
-        if (IsEqual(key, Header::CONTENT_LENGTH_KEY)) {
+        if (utils::IsEqual(key, Header::CONTENT_LENGTH_KEY)) {
             result.m_bodyKind = BodyContentKind::contentLengthSpecified;
             result.m_bodyLength = utils::ExtractInteger(raw);
         }
-        else if (IsEqual(key, Header::TRANSFER_ENCODED_KEY) 
-            && IsEqual(raw, Header::TRANSFER_ENCODED_VALUE)         
+        else if (utils::IsEqual(key, Header::TRANSFER_ENCODED_KEY) 
+            && utils::IsEqual(raw, Header::TRANSFER_ENCODED_VALUE)         
         ) {
             result.m_bodyKind = BodyContentKind::chunkedTransferEncoded;
             result.m_bodyLength = std::string_view::npos;
