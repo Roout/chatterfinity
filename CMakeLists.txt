@@ -16,6 +16,7 @@ list(APPEND headers
 	"Response.hpp"
 	"Utility.hpp"
 	"Logger.hpp"
+	"Config.hpp"
 )
 	
 list(APPEND sources 

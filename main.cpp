@@ -20,52 +20,12 @@
 #include "Utility.hpp"
 #include "Connection.hpp"
 #include "Token.hpp"
+#include "Config.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
 namespace temp {
-
-    struct Config {
-        std::string id_;
-        std::string secret_;
-
-        static constexpr std::string_view kConfigPath = "secret/secrets.cfg";
-        static constexpr char kDelimiter = ':';
-
-    public:
-        void Read() {
-            std::ifstream in(kConfigPath.data());
-            if (!in.is_open()) {
-                throw std::exception("Failed to open config file");
-            }
-            std::string buffer;
-            while (getline(in, buffer)) {
-                const auto delimiter = buffer.find(kDelimiter);
-                if (delimiter == std::string::npos) {
-                    throw std::exception("Wrong config file format");
-                }
-
-                std::string_view key { buffer.data(), delimiter };
-                key = utils::Trim(key, " \"\n");
-                std::string_view value { buffer.data() + delimiter + 1 };
-                value = utils::Trim(value, " \"\n");
-                
-                if (utils::IsEqual(key, "id")) {
-                    id_.assign(value.data(), value.size());
-                }
-                else if (utils::IsEqual(key, "secret")) {
-                    secret_.assign(value.data(), value.size());
-                }
-                else {
-                    assert(false && "Unreachable: unexcpected key");
-                }
-            }
-            assert(!id_.empty());
-            assert(!secret_.empty());
-        }
-
-    };
 
     class Blizzard : public std::enable_shared_from_this<Blizzard> {
     public:
@@ -235,6 +195,44 @@ namespace temp {
         // connection id
         static inline size_t lastId { 0 };
     };
+
+    // This is source of input 
+    class Console {
+    public:
+                
+        // blocks execution thread
+        void Run() {
+            static constexpr std::string_view kDelimiter = " ";
+            std::string buffer;
+            while (true) {
+                std::getline(std::cin, buffer);
+                std::string_view input { buffer };
+                input = utils::Trim(input);
+                // parse buffer
+                std::vector<std::string_view> args;
+                auto delimiter = input.find(kDelimiter);
+                while (delimiter != std::string_view::npos) {
+                    args.emplace_back(input.data(), delimiter);
+                    // remove prefix with delimiter
+                    input.remove_prefix(delimiter + 1);
+                    // remove all special characters from the input
+                    input = utils::Trim(input);
+                    // update delimiter position
+                    delimiter = buffer.find(kDelimiter);
+                }
+                args.emplace_back(input);
+                // create command
+
+                // pass command to executor
+            }
+        }
+
+    private:
+
+        // blizzard API
+        std::shared_ptr<Blizzard> blizzard_;
+    };
+
 }
 
 int main() {
