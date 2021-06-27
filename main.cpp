@@ -7,6 +7,8 @@
 #include <exception>
 #include <mutex>
 #include <chrono>
+#include <algorithm>
+#include <iterator>
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -21,12 +23,14 @@
 #include "Connection.hpp"
 #include "Token.hpp"
 #include "Config.hpp"
+#include "Command.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
-namespace temp {
 
+namespace temp {
+    // service
     class Blizzard : public std::enable_shared_from_this<Blizzard> {
     public:
         Blizzard(std::shared_ptr<ssl::context> ssl) 
@@ -42,8 +46,66 @@ namespace temp {
         Blizzard& operator=(Blizzard&&) = delete;
 
         ~Blizzard() {
-            std::lock_guard<std::mutex> lock { m_outputMutex };
-            std::cout << "~Blizzard()\n";
+            {
+                std::lock_guard<std::mutex> lock { m_outputMutex };
+                std::cout << "~Blizzard()\n";
+            }
+            for (auto& t: m_threads) t.join();
+        }
+
+        template<typename Command,
+            typename = std::enable_if_t<command::is_blizzard_api<Command>::value>
+        >
+        void Execute(Command& cmd) {
+            if constexpr (std::is_same_v<Command, command::RealmID>) {
+                auto initiateRealmQuery = [weak = weak_from_this()]() {
+                    if (auto self = weak.lock(); self) {
+                        self->QueryRealm([weak](size_t realmId) {
+                            if (auto self = weak.lock(); self) {
+                                std::cout << "ID acquired: " << realmId << '\n';
+                            }
+                        });
+                    }
+                };
+                if (!m_token.IsValid()) {
+                    AcquireToken(std::move(initiateRealmQuery));
+                }
+                else {
+                    std::invoke(initiateRealmQuery);
+                }
+            }
+            else if (std::is_same_v<Command, command::RealmStatus>) {
+                auto initiateRealmQuery = [weak = weak_from_this()]() {
+                    if (auto self = weak.lock(); self) {
+                        self->QueryRealm([weak](size_t realmId) {
+                            if (auto self = weak.lock(); self) {
+                                std::cout << "ID acquired: " << realmId << '\n';
+                                self->QueryRealmStatus(realmId, [weak](){
+                                    if (auto self = weak.lock(); self) {
+                                        std::cout << "Realm confirmed!\n";
+                                    }
+                                });
+                            }
+                        });
+                    }
+                };
+                if (!m_token.IsValid()) {
+                    AcquireToken(std::move(initiateRealmQuery));
+                }
+                else {
+                    std::invoke(initiateRealmQuery);
+                }
+            }
+            else if (std::is_same_v<Command, command::AccessToken>) {
+                AcquireToken([weak = weak_from_this()]() {
+                    if (auto self = weak.lock(); self) {
+                        std::cout << "Token acquired.\n";
+                    }
+                });
+            }
+            else {
+                assert(false && "Unreachable: Unknown blizzard command");
+            }
         }
 
         void ResetWork() {
@@ -51,9 +113,8 @@ namespace temp {
         }
 
         void Run() {
-            std::vector<std::thread> threads;
             for (size_t i = 0; i < kThreads; i++) {
-                threads.emplace_back([this](){
+                m_threads.emplace_back([this](){
                     for (;;) {
                         try {
                             m_context->run();
@@ -67,7 +128,6 @@ namespace temp {
                     }
                 });
             }
-            for (auto&& t: threads) t.join();
         }
 
         void QueryRealm(std::function<void(size_t realmId)> continuation = {}) const {
@@ -184,6 +244,8 @@ namespace temp {
 
 
         static constexpr size_t kThreads { 2 };
+        std::vector<std::thread> m_threads;
+
         mutable std::mutex m_outputMutex;
         Token m_token;
         std::shared_ptr<boost::asio::io_context> m_context;
@@ -199,10 +261,16 @@ namespace temp {
     // This is source of input 
     class Console {
     public:
-                
+        Console(std::shared_ptr<Blizzard> blizzard) 
+            : blizzard_ { blizzard }
+        {
+        }
+
         // blocks execution thread
         void Run() {
-            static constexpr std::string_view kDelimiter = " ";
+            using namespace std::literals;
+
+            static constexpr std::string_view kDelimiter { " " };
             std::string buffer;
             while (true) {
                 std::getline(std::cin, buffer);
@@ -218,17 +286,34 @@ namespace temp {
                     // remove all special characters from the input
                     input = utils::Trim(input);
                     // update delimiter position
-                    delimiter = buffer.find(kDelimiter);
+                    delimiter = input.find(kDelimiter);
                 }
                 args.emplace_back(input);
-                // create command
-
+                assert(!args.empty() && "Args list can't be empty");
                 // pass command to executor
+                if (args.front() == "!realm-id"sv) {
+                    command::RealmID().accept(*blizzard_);
+                }
+                else if (args.front() == "!realm-status"sv) {
+                    command::RealmStatus().accept(*blizzard_);
+                }
+                else if (args.front() == "!token"sv) {
+                    command::AccessToken().accept(*blizzard_);
+                }
+                else if (args.front() == "!quit"sv) {
+                    std::cout << "Bye!\n";
+                    blizzard_->ResetWork();
+                    break;
+                }
+                else {
+                    std::cout << "\"{\nparsed\": [\n\t";
+                    std::copy(args.cbegin(), args.cend(), std::ostream_iterator<std::string_view>(std::cout, ", "));
+                    std::cout << "\n]}\n";
+                }
             }
         }
 
     private:
-
         // blizzard API
         std::shared_ptr<Blizzard> blizzard_;
     };
@@ -256,14 +341,8 @@ int main() {
     }
 
     try {
-        blizzardService->AcquireToken([blizzardService]() {
-            blizzardService->QueryRealm([blizzardService](size_t realmId) {
-                blizzardService->QueryRealmStatus(realmId, [blizzardService](){
-                    blizzardService->ResetWork();
-                });
-            });
-        });
         blizzardService->Run();
+        temp::Console(blizzardService).Run();
     }
     catch (std::exception const& e) {
         std::cout << e.what() << '\n';
