@@ -265,7 +265,7 @@ void Connection::OnReadChunkedBody(const boost::system::error_code& error, size_
 }
 
 void Connection::ReadIntactBody() {
-    assert(m_header.m_bodyKind == net::http::BodyContentKind::chunkedTransferEncoded);
+    assert(m_header.m_bodyKind == net::http::BodyContentKind::contentLengthSpecified);
     static constexpr size_t kChunkSize = 1024;
     // size of the content I need to parse from the HTTP response
     const auto bodyExpectedSize = static_cast<size_t>(m_header.m_bodyLength);
