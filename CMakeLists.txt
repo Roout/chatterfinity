@@ -10,21 +10,21 @@ set(headers)
 set(sources)
 
 list(APPEND headers
-	"Connection.hpp"
-	"Token.hpp"
-	"Request.hpp"
-	"Response.hpp"
-	"Utility.hpp"
-	"Logger.hpp"
-	"Config.hpp"
-	"Command.hpp"
+	"src/Connection.hpp"
+	"src/Token.hpp"
+	"src/Request.hpp"
+	"src/Response.hpp"
+	"src/Utility.hpp"
+	"src/Logger.hpp"
+	"src/Config.hpp"
+	"src/Command.hpp"
 )
 	
 list(APPEND sources 
-	"main.cpp"
-	"Request.cpp"
-	"Response.cpp"
-	"Connection.cpp"
+	"src/main.cpp"
+	"src/Request.cpp"
+	"src/Response.cpp"
+	"src/Connection.cpp"
 )
 
 add_executable(${This} ${sources} ${headers})
@@ -48,7 +48,7 @@ include("${CMAKE_SOURCE_DIR}/vendor/rapidjson.cmake")
 add_dependencies(${This} rapidjson)
 
 target_include_directories(${This} 
-	PUBLIC "include"
+	PUBLIC "src"
 	PUBLIC ${RAPIDJSON_INCLUDE_DIR}
 	PUBLIC ${Boost_INCLUDE_DIRS} 
 )
