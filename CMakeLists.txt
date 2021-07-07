@@ -18,6 +18,7 @@ list(APPEND headers
 	"src/Logger.hpp"
 	"src/Config.hpp"
 	"src/Command.hpp"
+	"src/Executor.hpp"
 )
 	
 list(APPEND sources 
