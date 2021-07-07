@@ -6,10 +6,12 @@
 #include <optional>
 #include <exception>
 #include <mutex>
+#include <future>
 #include <chrono>
 #include <algorithm>
 #include <iterator>
 #include <unordered_map>
+#include <initializer_list>
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -29,18 +31,53 @@
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
-
 namespace temp {
 
     class Blizzard;
 
+    template<class Service>
+    class Translator {
+    public:
+        using Params = std::vector<std::string_view>;
+        using Handle = std::function<void(const Params&, Service&)>;
+
+        Translator() {
+            using namespace std::literals;
+            using Pair_t = std::pair<const std::string_view, Handle>;
+
+            std::initializer_list<Pair_t> list {
+                { "realm-id"sv,      CreateHandle<command::RealmID>() },
+                { "realm-status"sv,  CreateHandle<command::RealmStatus>() },
+                { "token"sv,         CreateHandle<command::AccessToken>() },
+                { "shutdown"sv,      CreateHandle<command::Quit>() }
+            };
+            table_.insert(list);
+        };
+
+        Handle GetHandle(std::string_view command) const noexcept {
+            if (auto it = table_.find(command); it != table_.end()) {
+                return it->second;
+            }
+            return {};
+        }
+
+    private:
+        template<typename Command>
+        constexpr Handle CreateHandle() const noexcept {
+            return [](const Param& params, Service& service) {
+                Execute(Command::Create(params), service);
+            };
+        }
+        // maps command to appropriate handle
+        std::unordered_map<std::string_view, Handle> table_;
+    };
+
     // This is source of input 
     class Console {
     public:
-        Console(std::shared_ptr<Blizzard> blizzard) 
-            : blizzard_ { blizzard }
-        {
-        }
+        using Service = Blizzard;
+
+        Console() {}
 
         static std::string ReadLn() {
             std::string buffer;
@@ -63,7 +100,6 @@ namespace temp {
         // blocks execution thread
         void Run() {
             using namespace std::literals;
-            InitTable();
 
             static constexpr std::string_view kDelimiter { " " };
             std::string buffer;
@@ -86,13 +122,7 @@ namespace temp {
                 args.emplace_back(input);
                 assert(!args.empty() && "Args list can't be empty");
                 // pass command to executor
-                if (auto it = table_.find(args.front()); it != table_.end()) {
-                    std::invoke(it->second);
-                    if (it->first == "!quit"sv) {
-                        break;
-                    }
-                }
-                else {
+                {
                     Write("parsed: [ "sv, args.front(), ", ... ]\n"sv);
                 }
             }
@@ -100,23 +130,17 @@ namespace temp {
 
     private:
 
-        void InitTable();
-
-        std::unordered_map<std::string_view, std::function<void()>> table_;
-        // blizzard API
-        std::shared_ptr<Blizzard> blizzard_;
-
         static inline std::mutex in_ {};
         static inline std::mutex out_ {};
     };
-
+    
     // service
     class Blizzard : public std::enable_shared_from_this<Blizzard> {
     public:
         Blizzard(std::shared_ptr<ssl::context> ssl) 
             : m_context { std::make_shared<boost::asio::io_context>() }
-            , m_sslContext { ssl }
             , m_work { m_context->get_executor() }
+            , m_sslContext { ssl }
         {
         }
 
@@ -131,9 +155,9 @@ namespace temp {
         }
 
         template<typename Command,
-            typename = std::enable_if_t<command::is_blizzard_api<Command>::value>
+            typename = std::enable_if_t<command::details::is_blizzard_api_v<Command>>
         >
-        void Execute(Command& cmd) {
+        void Execute([[maybe_unused]] Command& cmd) {
             if constexpr (std::is_same_v<Command, command::RealmID>) {
                 auto initiateRealmQuery = [weak = weak_from_this()]() {
                     if (auto self = weak.lock(); self) {
@@ -157,7 +181,7 @@ namespace temp {
                         self->QueryRealm([weak](size_t realmId) {
                             if (auto self = weak.lock(); self) {
                                 temp::Console::Write("ID acquired: ", realmId, '\n');
-                                self->QueryRealmStatus(realmId, [weak](){
+                                self->QueryRealmStatus(realmId, [weak]() {
                                     if (auto self = weak.lock(); self) {
                                         temp::Console::Write("Realm confirmed!\n");
                                     }
@@ -179,6 +203,9 @@ namespace temp {
                         temp::Console::Write("Token acquired.\n");
                     }
                 });
+            }
+            else if (std::is_same_v<Command, command::Quit>) {
+                Shutdown();
             }
             else {
                 assert(false && "Unreachable: Unknown blizzard command");
@@ -299,6 +326,11 @@ namespace temp {
 
         }
 
+        void Shutdown() {
+            Console::Write("Bye!\n");
+            this->ResetWork();
+        }
+
     private:
         using Work_t = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
         
@@ -312,32 +344,16 @@ namespace temp {
 
         Token m_token;
         std::shared_ptr<boost::asio::io_context> m_context;
-        std::shared_ptr<ssl::context> m_sslContext;
         Work_t m_work;
+        std::shared_ptr<ssl::context> m_sslContext;
 
         Config m_config;
+
 
         // connection id
         static inline size_t lastId { 0 };
     };
 
-
-    void Console::InitTable() {
-        using namespace std::literals;
-        table_["!realm-id"sv] = [this]() {
-            command::RealmID().accept(*blizzard_);
-        };
-        table_["!realm-status"sv] = [this]() {
-            command::RealmStatus().accept(*blizzard_);
-        };
-        table_["!token"sv] = [this]() {
-            command::AccessToken().accept(*blizzard_);
-        };
-        table_["!quit"sv] = [this]() {
-            Write("Bye!\n");
-            blizzard_->ResetWork();
-        };
-    }
 }
 
 int main() {
@@ -362,7 +378,7 @@ int main() {
 
     try {
         blizzardService->Run();
-        temp::Console(blizzardService).Run();
+        temp::Console().Run();
     }
     catch (std::exception const& e) {
         temp::Console::Write(e.what(), '\n');
