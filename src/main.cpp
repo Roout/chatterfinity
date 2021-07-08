@@ -356,32 +356,49 @@ namespace temp {
 
 }
 
+class App {
+public:
+    App() 
+        : ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
+        , blizzard_ { std::make_shared<temp::Blizzard>(ssl_) }
+        , console_ {}
+    {
+        /**
+         * [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
+         * Cert Chain:
+         * DigiCert High Assurance EV Root CA => DigiCert SHA2 High Assurance Server CA => *.battle.net
+         * So root cert is DigiCert High Assurance EV Root CA;
+         * Valid until: 10/Nov/2031
+         * 
+         * TODO: read this path from secret + with some chiper
+        */
+        boost::system::error_code error;
+        ssl_->load_verify_file(kVerifyFilePath, error);
+        if (error) {
+            temp::Console::Write("[ERROR]: ", error.message(), '\n');
+        }
+    }
+
+    void Run() {
+        try {
+            blizzard_->Run();
+            console_.Run();
+        }
+        catch (std::exception const& e) {
+            temp::Console::Write(e.what(), '\n');
+        }
+    }
+
+private:
+    const char * const kVerifyFilePath = "DigiCertHighAssuranceEVRootCA.crt.pem";
+
+    std::shared_ptr<ssl::context> ssl_;
+    // services:
+    std::shared_ptr<temp::Blizzard> blizzard_;
+    temp::Console console_;
+};
+
 int main() {
-    boost::system::error_code error;
-    auto sslContext = std::make_shared<ssl::context>(ssl::context::method::sslv23_client);
-    auto blizzardService = std::make_shared<temp::Blizzard>(sslContext);
-
-    /**
-     * [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
-     * Cert Chain:
-     * DigiCert High Assurance EV Root CA => DigiCert SHA2 High Assurance Server CA => *.battle.net
-     * So root cert is DigiCert High Assurance EV Root CA;
-     * Valid until: 10/Nov/2031
-     * 
-     * TODO: read this path from secret + with some chiper
-    */
-    const char *verifyFilePath = "DigiCertHighAssuranceEVRootCA.crt.pem";
-    sslContext->load_verify_file(verifyFilePath, error);
-    if (error) {
-        temp::Console::Write("[ERROR]: ", error.message(), '\n');
-    }
-
-    try {
-        blizzardService->Run();
-        temp::Console().Run();
-    }
-    catch (std::exception const& e) {
-        temp::Console::Write(e.what(), '\n');
-    }
+    App().Run();
     return 0;
 }
