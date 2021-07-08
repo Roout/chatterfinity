@@ -19,6 +19,7 @@ list(APPEND headers
 	"src/Config.hpp"
 	"src/Command.hpp"
 	"src/Executor.hpp"
+	"src/ConcurrentQueue.hpp"
 )
 	
 list(APPEND sources 
