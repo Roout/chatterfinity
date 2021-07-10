@@ -7,8 +7,8 @@ namespace chrono = std::chrono;
 
 class Token {
 public:
-    using TimePoint_t = chrono::time_point<chrono::steady_clock>;
-    using Duration_t = chrono::seconds;
+    using TimePoint = chrono::time_point<chrono::steady_clock>;
+    using Duration = chrono::seconds;
 
     Token() 
         : content_ {}
@@ -16,13 +16,13 @@ public:
         , duration_ { 0 }
     {}
 
-    Token(std::string token, Duration_t expireTime) 
+    Token(std::string token, Duration expireTime) 
         : content_ { std::move(token) }
         , update_ { chrono::steady_clock::now() }
         , duration_ { expireTime }
     {}
 
-    void Emplace(std::string token, Duration_t expireTime) noexcept {
+    void Emplace(std::string token, Duration expireTime) noexcept {
         std::lock_guard<std::mutex> lock{ mutex_ };
         content_ = std::move(token);
         update_ = chrono::steady_clock::now();
@@ -32,7 +32,7 @@ public:
     bool IsValid() const noexcept {
         const auto now = chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock{ mutex_ };
-        return chrono::duration_cast<Duration_t>(now - update_) < duration_;
+        return chrono::duration_cast<Duration>(now - update_) < duration_;
     }
 
     std::string Get() const {
@@ -43,7 +43,7 @@ public:
 private:
 
     std::string content_ {};
-    TimePoint_t update_ { chrono::steady_clock::now() };
-    Duration_t  duration_ { 0 };
+    TimePoint update_ { chrono::steady_clock::now() };
+    Duration  duration_ { 0 };
     mutable std::mutex  mutex_;
 };
