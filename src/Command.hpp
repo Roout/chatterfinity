@@ -36,8 +36,13 @@ namespace command {
             // TODO: parse!
             return { };
         }
+    };
 
-    public:
+    struct Help {
+        static Help Create(const std::vector<std::string_view>& params) {
+            // TODO: parse!
+            return { };
+        }
     };
 
     namespace details {
@@ -55,6 +60,7 @@ namespace command {
         struct is_console_api {
             static constexpr bool value { 
                 std::is_same_v<T, Shutdown>
+                || std::is_same_v<T, Help>
             };
         };
 

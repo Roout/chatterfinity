@@ -55,4 +55,13 @@ inline void Console::Execute(Command&& cmd) {
         inbox_->DisableSentinel();
         running_ = false;
     }
+    else if (std::is_same_v<Command, command::Help>) {
+        Write("available commands:\n"
+            "\t!shutdown - exit the application\n"
+            "\t!help - show existing commands\n"
+            "\t!token - acquire token fromn blizzard\n"
+            "\t!realm-id - get id of the [flamegor] realm\n"
+            "\t!realm-status - get status of the [flamegor] realm\n"
+        );
+    }
 }

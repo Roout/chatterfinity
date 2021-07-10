@@ -8,7 +8,12 @@ Console::Console(CcQueue<command::RawCommand> * inbox)
     assert(inbox_ != nullptr);
 
     using namespace std::literals::string_view_literals;
-    translator_.Insert({ "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) });
+
+    std::initializer_list<Translator::Pair> list {
+        { "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) },
+        { "help"sv,     Translator::CreateHandle<command::Help>(*this) }
+    };
+    translator_.Insert(list);
 }
 
 Console::~Console() {
