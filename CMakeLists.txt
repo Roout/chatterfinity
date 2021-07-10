@@ -17,6 +17,7 @@ list(APPEND headers
 	"src/Utility.hpp"
 	"src/Logger.hpp"
 	"src/Config.hpp"
+	"src/Translator.hpp"
 	"src/Command.hpp"
 	"src/Executor.hpp"
 	"src/ConcurrentQueue.hpp"

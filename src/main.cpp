@@ -6,12 +6,9 @@
 #include <optional>
 #include <exception>
 #include <mutex>
-#include <future>
 #include <chrono>
 #include <algorithm>
 #include <iterator>
-#include <unordered_map>
-#include <initializer_list>
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -27,49 +24,13 @@
 #include "Token.hpp"
 #include "Config.hpp"
 #include "Command.hpp"
+#include "Translator.hpp"
 #include "ConcurrentQueue.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
 namespace temp {
-
-    class Blizzard;
-
-    class Translator {
-    public:
-        using Params = std::vector<std::string_view>;
-        using Handle = std::function<void(const Params&)>;
-        using Pair   = std::pair<const std::string_view, Handle>;
-
-        Translator() = default;
-
-        void Insert(const Pair& commandWithHandle) {
-            table_.insert(commandWithHandle);
-        }
-
-        void Insert(std::initializer_list<Pair> commandList) {
-            table_.insert(commandList);
-        }
-
-        std::optional<Handle> GetHandle(std::string_view command) const noexcept {
-            if (auto it = table_.find(command); it != table_.end()) {
-                return std::make_optional<Handle>(it->second);
-            }
-            return std::nullopt;
-        }
-
-        template<typename Command, typename Service>
-        static Handle CreateHandle(Service& service) noexcept {
-            return [&service](const Params& params) mutable {
-                Execute(Command::Create(params), service);
-            };
-        }
-
-    private:
-        // maps command to appropriate handle
-        std::unordered_map<std::string_view, Handle> table_;
-    };
 
     // This is source of input 
     class Console {
@@ -409,7 +370,6 @@ public:
             temp::Console::Write("[ERROR]: ", error.message(), '\n');
         }
         using namespace std::literals::string_view_literals;
-        using temp::Translator;
 
         std::initializer_list<Translator::Pair> list {
             {"realm-id"sv,      Translator::CreateHandle<command::RealmID>(*blizzard_) },
@@ -462,7 +422,7 @@ private:
     std::vector<std::thread> workers_;
     // common queue
     CcQueue<command::RawCommand> commands_;
-    temp::Translator translator_;
+    Translator translator_;
     // ssl
     std::shared_ptr<ssl::context> ssl_;
     // services:
