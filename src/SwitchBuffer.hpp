@@ -9,38 +9,38 @@
 class SwitchBuffer {
 public:
     SwitchBuffer(size_t reserved = 10) {
-        m_buffers[0].reserve(reserved);
-        m_buffers[1].reserve(reserved);
-        m_bufferSequence.reserve(reserved);
+        buffers_[0].reserve(reserved);
+        buffers_[1].reserve(reserved);
+        bufferSequence_.reserve(reserved);
     }
 
     /**
      * Queue data to passibe buffer. 
      */
     void Enque(std::string&& data) {
-        m_buffers[m_activeBuffer ^ 1].emplace_back(std::move(data));
+        buffers_[activeBuffer_ ^ 1].emplace_back(std::move(data));
     }
 
     /**
-     * Swap buffers and update @m_bufferSequence.
+     * Swap buffers and update @bufferSequence_.
      */
     void SwapBuffers() {
-        m_bufferSequence.clear();
+        bufferSequence_.clear();
 
-        m_buffers[m_activeBuffer].clear();
-        m_activeBuffer ^= 1;
+        buffers_[activeBuffer_].clear();
+        activeBuffer_ ^= 1;
 
-        for (const auto& buf: m_buffers[m_activeBuffer]) {
-            m_bufferSequence.emplace_back(boost::asio::const_buffer(buf.c_str(), buf.size()));
+        for (const auto& buf: buffers_[activeBuffer_]) {
+            bufferSequence_.emplace_back(boost::asio::const_buffer(buf.c_str(), buf.size()));
         }
     }
 
     size_t GetQueueSize() const noexcept {
-        return m_buffers[m_activeBuffer ^ 1].size();
+        return buffers_[activeBuffer_ ^ 1].size();
     } 
 
     const std::vector<boost::asio::const_buffer>& GetBufferSequence() const noexcept {
-        return m_bufferSequence;
+        return bufferSequence_;
     }
 
 private:
@@ -52,12 +52,12 @@ private:
      * One sequence is active, another one is passive. 
      * They can be swapped when needed. 
      **/    
-    DoubleBuffer m_buffers;
+    DoubleBuffer buffers_;
 
     /**
      * View const buffer sequence used by write operations. 
      */
-    std::vector<boost::asio::const_buffer> m_bufferSequence;
+    std::vector<boost::asio::const_buffer> bufferSequence_;
     
-    std::size_t m_activeBuffer { 0 };
+    std::size_t activeBuffer_ { 0 };
 };

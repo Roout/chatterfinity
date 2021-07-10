@@ -15,14 +15,14 @@ class Log final {
 public:
 
     Log(const char* filename) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_os.open(filename, std::ofstream::out);
+        std::lock_guard<std::mutex> lock(mutex_);
+        os_.open(filename, std::ofstream::out);
     }
 
     ~Log() {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_os.is_open()) {
-            m_os.close();
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (os_.is_open()) {
+            os_.close();
         }
     }
     
@@ -33,24 +33,24 @@ public:
             now.time_since_epoch()
         );
 
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_os << ms.count() << ' ';
+        std::lock_guard<std::mutex> lock(mutex_);
+        os_ << ms.count() << ' ';
         switch (type) {
             case LogType::info: {
-                m_os << "--info: ";
+                os_ << "--info: ";
             } break;
             case LogType::error: {
-                m_os << "--error: ";
+                os_ << "--error: ";
             } break;
             case LogType::warning: {
-                m_os << "--warning: ";
+                os_ << "--warning: ";
             } break;
             default: break;
         }
-        ((m_os << " " << std::forward<Args>(args)), ...);
+        ((os_ << " " << std::forward<Args>(args)), ...);
     }
 
 private:
-    std::ofstream   m_os {};
-    std::mutex      m_mutex;
+    std::ofstream   os_ {};
+    std::mutex      mutex_;
 };

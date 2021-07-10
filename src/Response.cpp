@@ -33,12 +33,12 @@ Header ParseHeader(std::string_view src) {
         assert(utils::Trim(part) == part && "Status parsing failed");
     }
 
-    result.m_httpVersion = statusParts[0];
-    result.m_statusCode = static_cast<uint16_t>(utils::ExtractInteger(statusParts[1]));
-    result.m_reasonPhrase = statusParts[2];
+    result.httpVersion_ = statusParts[0];
+    result.statusCode_ = static_cast<uint16_t>(utils::ExtractInteger(statusParts[1]));
+    result.reasonPhrase_ = statusParts[2];
     // default values:
-    result.m_bodyKind = BodyContentKind::unknown;
-    result.m_bodyLength = std::string_view::npos;
+    result.bodyKind_ = BodyContentKind::unknown;
+    result.bodyLength_ = std::string_view::npos;
     // extract FIELDS
     for (size_t start = statusEnd, finish = src.find_first_of(FIELD_DELIMITER.data(), statusEnd); 
         finish != std::string::npos && start != finish;
@@ -53,14 +53,14 @@ Header ParseHeader(std::string_view src) {
         raw = utils::Trim(raw, " ");
 
         if (utils::IsEqual(key, Header::CONTENT_LENGTH_KEY)) {
-            result.m_bodyKind = BodyContentKind::contentLengthSpecified;
-            result.m_bodyLength = utils::ExtractInteger(raw);
+            result.bodyKind_ = BodyContentKind::contentLengthSpecified;
+            result.bodyLength_ = utils::ExtractInteger(raw);
         }
         else if (utils::IsEqual(key, Header::TRANSFER_ENCODED_KEY) 
             && utils::IsEqual(raw, Header::TRANSFER_ENCODED_VALUE)         
         ) {
-            result.m_bodyKind = BodyContentKind::chunkedTransferEncoded;
-            result.m_bodyLength = std::string_view::npos;
+            result.bodyKind_ = BodyContentKind::chunkedTransferEncoded;
+            result.bodyLength_ = std::string_view::npos;
         }
 
         // update start

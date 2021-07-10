@@ -69,7 +69,7 @@ std::string CredentialsExchange::Build() const {
     
     return (boost::format(requestTemplate) 
         % REGION 
-        % UrlBase64::Encode(m_id + ':' + m_secret)
+        % UrlBase64::Encode(id_ + ':' + secret_)
     ).str();
 }
 
@@ -86,7 +86,7 @@ std::string Realm::Build() const {
         % NAMESPACE
         % LOCALE
         % REGION
-        % m_token
+        % token_
     ).str();
 }
 
@@ -98,11 +98,11 @@ std::string RealmStatus::Build() const {
             "\r\n";
     
     return (boost::format(requestTemplate) 
-        % m_connetedRealmId
+        % connetedRealmId_
         % NAMESPACE
         % LOCALE
         % REGION
-        % m_token
+        % token_
     ).str();
 }
 

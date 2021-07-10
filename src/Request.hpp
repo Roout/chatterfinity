@@ -30,8 +30,8 @@ namespace blizzard {
     class CredentialsExchange : public Query {
     public:
         CredentialsExchange(const std::string& id, const std::string& secret) 
-            : m_id { id }
-            , m_secret { secret }
+            : id_ { id }
+            , secret_ { secret }
         {
         }
 
@@ -39,8 +39,8 @@ namespace blizzard {
 
     private:
         // client credentials
-        std::string m_id;
-        std::string m_secret;
+        std::string id_;
+        std::string secret_;
     };
 
     // Realm API: Realm by slug
@@ -48,13 +48,13 @@ namespace blizzard {
     public:
 
         Realm(const std::string& token)
-            : m_token { token }
+            : token_ { token }
         {}
 
         std::string Build() const override;
 
     private:
-        std::string m_token;
+        std::string token_;
     };
 
     // 2. Connected Realm API: Connected Realm
@@ -63,15 +63,15 @@ namespace blizzard {
     public:
 
         RealmStatus(std::uint64_t realmId, const std::string& token)
-            : m_connetedRealmId { realmId }
-            , m_token { token }
+            : connetedRealmId_ { realmId }
+            , token_ { token }
         {}
 
         std::string Build() const override;
 
     private:
-        std::uint64_t m_connetedRealmId;
-        std::string m_token;
+        std::uint64_t connetedRealmId_;
+        std::string token_;
     };
 
     // 3. Creature Families { wolf, ... }

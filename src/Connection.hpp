@@ -70,12 +70,12 @@ private:
 private:
     struct Chunk {
         // size of chunk
-        size_t m_size { 0 };
+        size_t size_ { 0 };
         // number of consumed (processed) chunks
-        size_t m_consumed { 0 }; 
+        size_t consumed_ { 0 }; 
 
         void Reset() noexcept {
-            m_size = m_consumed = 0;
+            size_ = consumed_ = 0;
         }
     };
 
@@ -84,24 +84,24 @@ private:
     static constexpr std::string_view kHeaderDelimiter { "\r\n\r\n" };
 
     // === Boost IO stuff ===
-    io_context_pointer m_context { nullptr };
-    ssl_context_pointer m_sslContext { nullptr };
-    tcp::resolver m_resolver;
-    boost::asio::io_context::strand m_strand;
-    ssl::stream<tcp::socket> m_socket;
+    io_context_pointer context_ { nullptr };
+    ssl_context_pointer sslContext_ { nullptr };
+    tcp::resolver resolver_;
+    boost::asio::io_context::strand strand_;
+    ssl::stream<tcp::socket> socket_;
     
     // === Connection details === 
-    const size_t m_id { 0 };
-    const std::string m_host {};
-    std::shared_ptr<Log> m_log { nullptr };
-    std::function<void()> m_onSuccess;
+    const size_t id_ { 0 };
+    const std::string host_ {};
+    std::shared_ptr<Log> log_ { nullptr };
+    std::function<void()> onSuccess_;
 
     // === Read ===
-    boost::asio::streambuf m_inbox;
-    net::http::Header m_header;
-    Chunk m_chunk;
-    net::http::Body m_body;
+    boost::asio::streambuf inbox_;
+    net::http::Header header_;
+    Chunk chunk_;
+    net::http::Body body_;
 
     // === Write ===
-    std::string m_outbox;
+    std::string outbox_;
 };

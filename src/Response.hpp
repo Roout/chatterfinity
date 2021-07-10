@@ -24,14 +24,14 @@ namespace net::http {
         static constexpr std::string_view CONTENT_LENGTH_KEY = "content-length";
 
         // status line
-        std::string     m_httpVersion;
-        std::string     m_reasonPhrase;
-        std::uint16_t   m_statusCode;
+        std::string     httpVersion_;
+        std::string     reasonPhrase_;
+        std::uint16_t   statusCode_;
 
         // can't get rid of this property cuz it's important to confirm 
         // it's not a `BodyContentKind::unknown` type
-        BodyContentKind m_bodyKind;
-        std::uint64_t   m_bodyLength;
+        BodyContentKind bodyKind_;
+        std::uint64_t   bodyLength_;
     };
 
     Header ParseHeader(std::string_view src);
@@ -39,8 +39,8 @@ namespace net::http {
     using Body = std::string;
 
     struct Message {
-        Header  m_header;
-        Body    m_body;
+        Header  header_;
+        Body    body_;
     };
     
 }
