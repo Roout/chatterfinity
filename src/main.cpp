@@ -1,256 +1,24 @@
-#include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <cassert>
-#include <optional>
-#include <exception>
-#include <mutex>
-#include <chrono>
-#include <algorithm>
-#include <iterator>
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 
-#include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
-
-#include "Response.hpp"
-#include "Request.hpp"
-#include "Utility.hpp"
-#include "Connection.hpp"
-#include "Token.hpp"
-#include "Config.hpp"
 #include "Command.hpp"
 #include "Translator.hpp"
 #include "Console.hpp"
+#include "Blizzard.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
-
-namespace temp {
-    
-    // service
-    class Blizzard : public std::enable_shared_from_this<Blizzard> {
-    public:
-        Blizzard(std::shared_ptr<ssl::context> ssl) 
-            : context_ { std::make_shared<boost::asio::io_context>() }
-            , work_ { context_->get_executor() }
-            , sslContext_ { ssl }
-        {
-        }
-
-        Blizzard(const Blizzard&) = delete;
-        Blizzard(Blizzard&&) = delete;
-        Blizzard& operator=(const Blizzard&) = delete;
-        Blizzard& operator=(Blizzard&&) = delete;
-
-        ~Blizzard() {
-            Console::Write("  -> close blizzard service\n");
-            for (auto& t: threads_) t.join();
-        }
-
-        template<typename Command,
-            typename = std::enable_if_t<command::details::is_blizzard_api_v<Command>>
-        >
-        void Execute([[maybe_unused]] Command& cmd) {
-            if constexpr (std::is_same_v<Command, command::RealmID>) {
-                auto initiateRealmQuery = [weak = weak_from_this()]() {
-                    if (auto self = weak.lock(); self) {
-                        self->QueryRealm([weak](size_t realmId) {
-                            if (auto self = weak.lock(); self) {
-                                Console::Write("ID acquired:", realmId, '\n');
-                            }
-                        });
-                    }
-                };
-                if (!token_.IsValid()) {
-                    AcquireToken(std::move(initiateRealmQuery));
-                }
-                else {
-                    std::invoke(initiateRealmQuery);
-                }
-            }
-            else if (std::is_same_v<Command, command::RealmStatus>) {
-                auto initiateRealmQuery = [weak = weak_from_this()]() {
-                    if (auto self = weak.lock(); self) {
-                        self->QueryRealm([weak](size_t realmId) {
-                            if (auto self = weak.lock(); self) {
-                                Console::Write("ID acquired: ", realmId, '\n');
-                                self->QueryRealmStatus(realmId, [weak]() {
-                                    if (auto self = weak.lock(); self) {
-                                        Console::Write("Realm confirmed!\n");
-                                    }
-                                });
-                            }
-                        });
-                    }
-                };
-                if (!token_.IsValid()) {
-                    AcquireToken(std::move(initiateRealmQuery));
-                }
-                else {
-                    std::invoke(initiateRealmQuery);
-                }
-            }
-            else if (std::is_same_v<Command, command::AccessToken>) {
-                AcquireToken([weak = weak_from_this()]() {
-                    if (auto self = weak.lock(); self) {
-                        Console::Write("Token acquired.\n");
-                    }
-                });
-            }
-            else {
-                assert(false && "Unreachable: Unknown blizzard command");
-            }
-        }
-
-        void ResetWork() {
-            work_.reset();
-        }
-
-        void Run() {
-            for (size_t i = 0; i < kThreads; i++) {
-                threads_.emplace_back([this](){
-                    for (;;) {
-                        try {
-                            context_->run();
-                            break;
-                        }
-                        catch (std::exception& ex) {
-                            // some system exception
-                            Console::Write("[ERROR]: ", ex.what(), '\n');
-                        }
-                    }
-                });
-            }
-        }
-
-        void QueryRealm(std::function<void(size_t realmId)> continuation = {}) const {
-            const char * const kHost = "eu.api.blizzard.com";
-            auto request = blizzard::Realm(token_.Get()).Build();
-            auto connection = std::make_shared<Connection>(context_, sslContext_, GenerateId(), kHost);
-
-            connection->Write(request, [self = weak_from_this()
-                , callback = std::move(continuation)
-                , connection = connection->weak_from_this()
-            ]() mutable {
-                if (auto origin = connection.lock(); origin) {
-                    const auto [head, body] = origin->AcquireResponse();
-                    rapidjson::Document reader; 
-                    reader.Parse(body.data(), body.size());
-                    const auto realmId = reader["id"].GetUint64();
-
-                    if (auto service = self.lock(); service) {
-                        Console::Write("Realm id: [", realmId, "]\n");
-                        if (callback) {
-                            boost::asio::post(*service->context_, std::bind(callback, realmId));
-                        }
-                    }
-                }
-                else {
-                    assert(false && "Unreachable. For now you can invoke this function only synchroniously");
-                }
-            });
-        }
-
-        void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {}) const {
-            constexpr char * const kHost = "eu.api.blizzard.com";
-            auto request = blizzard::RealmStatus(realmId, token_.Get()).Build();
-            auto connection = std::make_shared<Connection>(context_, sslContext_, GenerateId(), kHost);
-
-            connection->Write(request, [self = weak_from_this()
-                , callback = std::move(continuation)
-                , connection = connection->weak_from_this()
-            ]() mutable {
-                if (auto origin = connection.lock(); origin) {
-                    const auto [head, body] = origin->AcquireResponse();
-
-                    if (auto service = self.lock(); service) {
-                        Console::Write("Body:\n", body, "\n");
-                        if (callback) {
-                            boost::asio::post(*service->context_, callback);
-                        }
-                    }
-                }
-                else {
-                    assert(false && "Unreachable. For now you can invoke this function only synchroniously");
-                }
-            });
-        }
-
-        void AcquireToken(std::function<void()> continuation = {}) {
-            config_.Read();
-            auto request = blizzard::CredentialsExchange(config_.id_, config_.secret_).Build();
-
-            constexpr char * const kHost = "eu.battle.net";
-            auto connection = std::make_shared<Connection>(context_, sslContext_, GenerateId(), kHost);
-
-            connection->Write(request, [self = weak_from_this()
-                , callback = std::move(continuation)
-                , connection = connection->weak_from_this()
-            ]() mutable {
-                if (auto origin = connection.lock(); origin) {
-                    auto [head, body] = origin->AcquireResponse();
-                    rapidjson::Document reader; 
-                    reader.Parse(body.data(), body.size());
-                    
-                    std::string token = reader["access_token"].GetString();
-                    const auto tokenType = reader["token_type"].GetString();
-                    const auto expires = reader["expires_in"].GetUint64();
-
-                    [[maybe_unused]] constexpr auto expectedDuration = 24 * 60 * 60 - 1;
-                    assert(expires >= expectedDuration && "Unexpected duration. Blizzard API may be changed!");
-                    assert(!strcmp(tokenType, "bearer") && "Unexpected token type. Blizzard API may be changed!");
-
-                    if (auto service = self.lock(); service) {
-                        Console::Write("Extracted token: [", token, "]\n");
-                        service->token_.Emplace(std::move(token), Token::Duration_t(expires));
-
-                        if (callback) {
-                            boost::asio::post(*service->context_, callback);
-                        }
-                    }
-                }
-                else {
-                    assert(false && "Unreachable. For now you can invoke this function only synchroniously");
-                }
-            });
-
-        }
-
-    private:
-        using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
-        
-        size_t GenerateId() const {
-            return Blizzard::lastID_++;
-        }
-
-
-        static constexpr size_t kThreads { 2 };
-        std::vector<std::thread> threads_;
-
-        Token token_;
-        std::shared_ptr<boost::asio::io_context> context_;
-        Work work_;
-        std::shared_ptr<ssl::context> sslContext_;
-
-        Config config_;
-
-        // connection id
-        static inline size_t lastID_ { 0 };
-    };
-
-}
 
 class App {
 public:
     App() 
         : commands_ { kSentinel }
         , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
-        , blizzard_ { std::make_shared<temp::Blizzard>(ssl_) }
+        , blizzard_ { std::make_shared<Blizzard>(ssl_) }
         , console_ { &commands_ }
     {
         const char * const kVerifyFilePath = "DigiCertHighAssuranceEVRootCA.crt.pem";
@@ -325,7 +93,7 @@ private:
     // ssl
     std::shared_ptr<ssl::context> ssl_;
     // services:
-    std::shared_ptr<temp::Blizzard> blizzard_;
+    std::shared_ptr<Blizzard> blizzard_;
     Console console_;
 };
 

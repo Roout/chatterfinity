@@ -20,6 +20,7 @@ list(APPEND headers
 	"src/Translator.hpp"
 	"src/Command.hpp"
 	"src/Console.hpp"
+	"src/Blizzard.hpp"
 	"src/Executor.hpp"
 	"src/ConcurrentQueue.hpp"
 )
@@ -29,6 +30,7 @@ list(APPEND sources
 	"src/Request.cpp"
 	"src/Response.cpp"
 	"src/Console.cpp"
+	"src/Blizzard.cpp"
 	"src/Connection.cpp"
 )
 
