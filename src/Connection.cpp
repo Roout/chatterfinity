@@ -166,13 +166,15 @@ void Connection::OnHeaderRead(const boost::system::error_code& error, size_t byt
         }
         m_log->Write(LogType::info, m_id, "OnHeaderRead read", bytes, "bytes.\n");
 
-        const auto data { m_inbox.data() };
-        const std::string header {
-            boost::asio::buffers_begin(data), 
-            boost::asio::buffers_begin(data) + bytes - kHeaderDelimiter.size()
-        };        
-        m_inbox.consume(bytes);
-        m_header = net::http::ParseHeader(header);
+        {
+            const auto data { m_inbox.data() };
+            const std::string header {
+                boost::asio::buffers_begin(data), 
+                boost::asio::buffers_begin(data) + bytes - kHeaderDelimiter.size()
+            };        
+            m_inbox.consume(bytes);
+            m_header = net::http::ParseHeader(header);
+        }
         // TODO: Handle status code!
         // print status line
         m_log->Write(LogType::info, m_id
@@ -192,8 +194,8 @@ void Connection::OnHeaderRead(const boost::system::error_code& error, size_t byt
             case BodyContentKind::contentLengthSpecified: {
                 if (m_inbox.size()) {
                     m_body.assign(
-                        boost::asio::buffers_begin(data), 
-                        boost::asio::buffers_begin(data) + m_inbox.size()
+                        boost::asio::buffers_begin(m_inbox.data()), 
+                        boost::asio::buffers_begin(m_inbox.data()) + m_inbox.size()
                     );
                     m_inbox.consume(m_inbox.size());
                 }
@@ -265,7 +267,7 @@ void Connection::OnReadChunkedBody(const boost::system::error_code& error, size_
 }
 
 void Connection::ReadIntactBody() {
-    assert(m_header.m_bodyKind == net::http::BodyContentKind::chunkedTransferEncoded);
+    assert(m_header.m_bodyKind == net::http::BodyContentKind::contentLengthSpecified);
     static constexpr size_t kChunkSize = 1024;
     // size of the content I need to parse from the HTTP response
     const auto bodyExpectedSize = static_cast<size_t>(m_header.m_bodyLength);
@@ -305,6 +307,15 @@ void Connection::OnReadIntactBody(const boost::system::error_code& error, size_t
         m_log->Write(LogType::warning, m_id, "failed OnReadIntactBody meet EOF", error.message(), "\n");
     }
     m_log->Write(LogType::info, m_id, "OnReadIntactBody read", bytes, "bytes.\n");
+
+    auto data = m_inbox.data();
+    std::string chunk {
+        boost::asio::buffers_begin(data), 
+        boost::asio::buffers_begin(data) + bytes
+    };
+    m_inbox.consume(bytes);
+    m_body.append(chunk);
+    // continue to read
     ReadIntactBody();
 }
 
