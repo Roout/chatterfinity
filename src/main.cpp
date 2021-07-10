@@ -27,6 +27,7 @@
 #include "Token.hpp"
 #include "Config.hpp"
 #include "Command.hpp"
+#include "ConcurrentQueue.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
@@ -35,39 +36,37 @@ namespace temp {
 
     class Blizzard;
 
-    template<class Service>
     class Translator {
     public:
         using Params = std::vector<std::string_view>;
-        using Handle = std::function<void(const Params&, Service&)>;
+        using Handle = std::function<void(const Params&)>;
+        using Pair   = std::pair<const std::string_view, Handle>;
 
-        Translator() {
-            using namespace std::literals;
-            using Pair_t = std::pair<const std::string_view, Handle>;
+        Translator() = default;
 
-            std::initializer_list<Pair_t> list {
-                { "realm-id"sv,      CreateHandle<command::RealmID>() },
-                { "realm-status"sv,  CreateHandle<command::RealmStatus>() },
-                { "token"sv,         CreateHandle<command::AccessToken>() },
-                { "shutdown"sv,      CreateHandle<command::Quit>() }
-            };
-            table_.insert(list);
-        };
-
-        Handle GetHandle(std::string_view command) const noexcept {
-            if (auto it = table_.find(command); it != table_.end()) {
-                return it->second;
-            }
-            return {};
+        void Insert(const Pair& commandWithHandle) {
+            table_.insert(commandWithHandle);
         }
 
-    private:
-        template<typename Command>
-        constexpr Handle CreateHandle() const noexcept {
-            return [](const Param& params, Service& service) {
+        void Insert(std::initializer_list<Pair> commandList) {
+            table_.insert(commandList);
+        }
+
+        std::optional<Handle> GetHandle(std::string_view command) const noexcept {
+            if (auto it = table_.find(command); it != table_.end()) {
+                return std::make_optional<Handle>(it->second);
+            }
+            return std::nullopt;
+        }
+
+        template<typename Command, typename Service>
+        static Handle CreateHandle(Service& service) noexcept {
+            return [&service](const Params& params) mutable {
                 Execute(Command::Create(params), service);
             };
         }
+
+    private:
         // maps command to appropriate handle
         std::unordered_map<std::string_view, Handle> table_;
     };
@@ -75,9 +74,15 @@ namespace temp {
     // This is source of input 
     class Console {
     public:
-        using Service = Blizzard;
+        Console(CcQueue<command::RawCommand> * inbox) 
+            : inbox_ { inbox }
+            , translator_ {}
+        {
+            assert(inbox_ != nullptr);
 
-        Console() {}
+            using namespace std::literals::string_view_literals;
+            translator_.Insert({ "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) });
+        }
 
         static std::string ReadLn() {
             std::string buffer;
@@ -103,7 +108,7 @@ namespace temp {
 
             static constexpr std::string_view kDelimiter { " " };
             std::string buffer;
-            while (true) {
+            while (running_) {
                 ReadLn(buffer);
                 std::string_view input { buffer };
                 input = utils::Trim(input);
@@ -120,15 +125,48 @@ namespace temp {
                     delimiter = input.find(kDelimiter);
                 }
                 args.emplace_back(input);
+                
                 assert(!args.empty() && "Args list can't be empty");
-                // pass command to executor
-                {
-                    Write("parsed: [ "sv, args.front(), ", ... ]\n"sv);
+
+                if (!args.front().empty()) {
+                    args.front().remove_prefix(1);
                 }
+
+                if (auto handle = translator_.GetHandle(args.front()); handle) {
+                    Write("Call handle:", args.front(), '\n');
+                    // try to proccess command here
+                    std::invoke(*handle, Translator::Params{++args.begin(), args.end()});
+                }
+                else {
+                    // can not recognize the command, pass it to other services
+                    command::RawCommand raw  { 
+                        std::string { args.front() }, 
+                        std::vector<std::string>{ ++args.begin(), args.end() }
+                    };
+                    if (!inbox_->TryPush(std::move(raw))) {
+                        // abandon the command
+                        Write("fail to proccess command: command storage is full\n");
+                    }
+                }
+
+                Write("  -> parsed: [ "sv, args.front(), ", ... ]\n"sv);
+            }
+        }
+
+        template<class Command>
+        void Execute(Command&& cmd) {
+            if constexpr (std::is_same_v<Command, command::Shutdown>) {
+                assert(inbox_ != nullptr && "Queue can not be NULL");
+                inbox_->DisableSentinel();
+                running_ = false;
             }
         }
 
     private:
+        CcQueue<command::RawCommand> * const inbox_ { nullptr };
+        Translator translator_ {};
+
+        bool running_ { true };
 
         static inline std::mutex in_ {};
         static inline std::mutex out_ {};
@@ -138,9 +176,9 @@ namespace temp {
     class Blizzard : public std::enable_shared_from_this<Blizzard> {
     public:
         Blizzard(std::shared_ptr<ssl::context> ssl) 
-            : m_context { std::make_shared<boost::asio::io_context>() }
-            , m_work { m_context->get_executor() }
-            , m_sslContext { ssl }
+            : context_ { std::make_shared<boost::asio::io_context>() }
+            , work_ { context_->get_executor() }
+            , sslContext_ { ssl }
         {
         }
 
@@ -151,7 +189,7 @@ namespace temp {
 
         ~Blizzard() {
             temp::Console::Write("~Blizzard()\n");
-            for (auto& t: m_threads) t.join();
+            for (auto& t: threads_) t.join();
         }
 
         template<typename Command,
@@ -168,7 +206,7 @@ namespace temp {
                         });
                     }
                 };
-                if (!m_token.IsValid()) {
+                if (!token_.IsValid()) {
                     AcquireToken(std::move(initiateRealmQuery));
                 }
                 else {
@@ -190,7 +228,7 @@ namespace temp {
                         });
                     }
                 };
-                if (!m_token.IsValid()) {
+                if (!token_.IsValid()) {
                     AcquireToken(std::move(initiateRealmQuery));
                 }
                 else {
@@ -204,24 +242,21 @@ namespace temp {
                     }
                 });
             }
-            else if (std::is_same_v<Command, command::Quit>) {
-                Shutdown();
-            }
             else {
                 assert(false && "Unreachable: Unknown blizzard command");
             }
         }
 
         void ResetWork() {
-            m_work.reset();
+            work_.reset();
         }
 
         void Run() {
             for (size_t i = 0; i < kThreads; i++) {
-                m_threads.emplace_back([this](){
+                threads_.emplace_back([this](){
                     for (;;) {
                         try {
-                            m_context->run();
+                            context_->run();
                             break;
                         }
                         catch (std::exception& ex) {
@@ -235,8 +270,8 @@ namespace temp {
 
         void QueryRealm(std::function<void(size_t realmId)> continuation = {}) const {
             const char * const kHost = "eu.api.blizzard.com";
-            auto request = blizzard::Realm(m_token.Get()).Build();
-            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), kHost);
+            auto request = blizzard::Realm(token_.Get()).Build();
+            auto connection = std::make_shared<Connection>(context_, sslContext_, GenerateId(), kHost);
 
             connection->Write(request, [self = weak_from_this()
                 , callback = std::move(continuation)
@@ -251,7 +286,7 @@ namespace temp {
                     if (auto service = self.lock(); service) {
                         temp::Console::Write("Realm id: [", realmId, "]\n");
                         if (callback) {
-                            boost::asio::post(*service->m_context, std::bind(callback, realmId));
+                            boost::asio::post(*service->context_, std::bind(callback, realmId));
                         }
                     }
                 }
@@ -263,8 +298,8 @@ namespace temp {
 
         void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {}) const {
             constexpr char * const kHost = "eu.api.blizzard.com";
-            auto request = blizzard::RealmStatus(realmId, m_token.Get()).Build();
-            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), kHost);
+            auto request = blizzard::RealmStatus(realmId, token_.Get()).Build();
+            auto connection = std::make_shared<Connection>(context_, sslContext_, GenerateId(), kHost);
 
             connection->Write(request, [self = weak_from_this()
                 , callback = std::move(continuation)
@@ -276,7 +311,7 @@ namespace temp {
                     if (auto service = self.lock(); service) {
                         temp::Console::Write("Body:\n", body, "\n");
                         if (callback) {
-                            boost::asio::post(*service->m_context, callback);
+                            boost::asio::post(*service->context_, callback);
                         }
                     }
                 }
@@ -287,11 +322,11 @@ namespace temp {
         }
 
         void AcquireToken(std::function<void()> continuation = {}) {
-            m_config.Read();
-            auto request = blizzard::CredentialsExchange(m_config.id_, m_config.secret_).Build();
+            config_.Read();
+            auto request = blizzard::CredentialsExchange(config_.id_, config_.secret_).Build();
 
             constexpr char * const kHost = "eu.battle.net";
-            auto connection = std::make_shared<Connection>(m_context, m_sslContext, GenerateId(), kHost);
+            auto connection = std::make_shared<Connection>(context_, sslContext_, GenerateId(), kHost);
 
             connection->Write(request, [self = weak_from_this()
                 , callback = std::move(continuation)
@@ -312,10 +347,10 @@ namespace temp {
 
                     if (auto service = self.lock(); service) {
                         temp::Console::Write("Extracted token: [", token, "]\n");
-                        service->m_token.Emplace(std::move(token), Token::Duration_t(expires));
+                        service->token_.Emplace(std::move(token), Token::Duration_t(expires));
 
                         if (callback) {
-                            boost::asio::post(*service->m_context, callback);
+                            boost::asio::post(*service->context_, callback);
                         }
                     }
                 }
@@ -326,32 +361,26 @@ namespace temp {
 
         }
 
-        void Shutdown() {
-            Console::Write("Bye!\n");
-            this->ResetWork();
-        }
-
     private:
-        using Work_t = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
+        using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
         
         size_t GenerateId() const {
-            return Blizzard::lastId++;
+            return Blizzard::lastID_++;
         }
 
 
         static constexpr size_t kThreads { 2 };
-        std::vector<std::thread> m_threads;
+        std::vector<std::thread> threads_;
 
-        Token m_token;
-        std::shared_ptr<boost::asio::io_context> m_context;
-        Work_t m_work;
-        std::shared_ptr<ssl::context> m_sslContext;
+        Token token_;
+        std::shared_ptr<boost::asio::io_context> context_;
+        Work work_;
+        std::shared_ptr<ssl::context> sslContext_;
 
-        Config m_config;
-
+        Config config_;
 
         // connection id
-        static inline size_t lastId { 0 };
+        static inline size_t lastID_ { 0 };
     };
 
 }
@@ -359,10 +388,12 @@ namespace temp {
 class App {
 public:
     App() 
-        : ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
+        : commands_ { kSentinel }
+        , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
         , blizzard_ { std::make_shared<temp::Blizzard>(ssl_) }
-        , console_ {}
+        , console_ { &commands_ }
     {
+        const char * const kVerifyFilePath = "DigiCertHighAssuranceEVRootCA.crt.pem";
         /**
          * [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
          * Cert Chain:
@@ -377,21 +408,62 @@ public:
         if (error) {
             temp::Console::Write("[ERROR]: ", error.message(), '\n');
         }
+        using namespace std::literals::string_view_literals;
+        using temp::Translator;
+
+        std::initializer_list<Translator::Pair> list {
+            {"realm-id"sv,      Translator::CreateHandle<command::RealmID>(*blizzard_) },
+            {"realm-status"sv,  Translator::CreateHandle<command::RealmStatus>(*blizzard_) },
+            {"token"sv,         Translator::CreateHandle<command::AccessToken>(*blizzard_) }
+        };
+        translator_.Insert(list);
+    }
+
+    ~App() {
+        blizzard_->ResetWork();
+        for (auto&&worker: workers_) {
+            worker.join();
+        }
     }
 
     void Run() {
-        try {
-            blizzard_->Run();
-            console_.Run();
+        // create consumers
+        for (std::size_t i = 0; i < kWorkerCount; i++) {
+            workers_.emplace_back([this]() {
+                while (true) {
+                    auto cmd { commands_.TryPop() };
+                    if (!cmd) {
+                        temp::Console::Write("  -> queue is empty\n");
+                        break;
+                    }
+                    if (auto handle = translator_.GetHandle(cmd->command_); handle) {
+                        std::invoke(*handle, std::vector<std::string_view> { 
+                            cmd->params_.begin(), 
+                            cmd->params_.end() 
+                        });
+                    }
+                    else {
+                        temp::Console::Write("Can not recognize a command:", cmd->command_);
+                    }
+                }
+            });
         }
-        catch (std::exception const& e) {
-            temp::Console::Write(e.what(), '\n');
-        }
+        // run services:
+
+        // -> doesn't block
+        blizzard_->Run();
+        // -> blocks
+        console_.Run();
     }
 
 private:
-    const char * const kVerifyFilePath = "DigiCertHighAssuranceEVRootCA.crt.pem";
-
+    static constexpr bool kSentinel { true };
+    static constexpr std::size_t kWorkerCount { 2 };
+    std::vector<std::thread> workers_;
+    // common queue
+    CcQueue<command::RawCommand> commands_;
+    temp::Translator translator_;
+    // ssl
     std::shared_ptr<ssl::context> ssl_;
     // services:
     std::shared_ptr<temp::Blizzard> blizzard_;
@@ -399,6 +471,7 @@ private:
 };
 
 int main() {
-    App().Run();
+    App app;
+    app.Run();
     return 0;
 }
