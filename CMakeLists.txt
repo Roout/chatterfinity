@@ -19,6 +19,7 @@ list(APPEND headers
 	"src/Config.hpp"
 	"src/Translator.hpp"
 	"src/Command.hpp"
+	"src/Console.hpp"
 	"src/Executor.hpp"
 	"src/ConcurrentQueue.hpp"
 )
@@ -27,6 +28,7 @@ list(APPEND sources
 	"src/main.cpp"
 	"src/Request.cpp"
 	"src/Response.cpp"
+	"src/Console.cpp"
 	"src/Connection.cpp"
 )
 

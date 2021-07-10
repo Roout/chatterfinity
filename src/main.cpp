@@ -25,113 +25,12 @@
 #include "Config.hpp"
 #include "Command.hpp"
 #include "Translator.hpp"
-#include "ConcurrentQueue.hpp"
+#include "Console.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
 namespace temp {
-
-    // This is source of input 
-    class Console {
-    public:
-        Console(CcQueue<command::RawCommand> * inbox) 
-            : inbox_ { inbox }
-            , translator_ {}
-        {
-            assert(inbox_ != nullptr);
-
-            using namespace std::literals::string_view_literals;
-            translator_.Insert({ "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) });
-        }
-
-        static std::string ReadLn() {
-            std::string buffer;
-            std::lock_guard<std::mutex> lock { in_ };
-            std::getline(std::cin, buffer);
-            return buffer;
-        }
-
-        static void ReadLn(std::string& buffer) {
-            std::lock_guard<std::mutex> lock { in_ };
-            std::getline(std::cin, buffer);
-        }
-
-        template<class ...Args>
-        static void Write(Args&&...args) {
-            std::lock_guard<std::mutex> lock { out_ };
-            ((std::cout << std::forward<Args>(args) << " "), ...);
-        }
-
-        // blocks execution thread
-        void Run() {
-            using namespace std::literals;
-
-            static constexpr std::string_view kDelimiter { " " };
-            std::string buffer;
-            while (running_) {
-                ReadLn(buffer);
-                std::string_view input { buffer };
-                input = utils::Trim(input);
-                // parse buffer
-                std::vector<std::string_view> args;
-                auto delimiter = input.find(kDelimiter);
-                while (delimiter != std::string_view::npos) {
-                    args.emplace_back(input.data(), delimiter);
-                    // remove prefix with delimiter
-                    input.remove_prefix(delimiter + 1);
-                    // remove all special characters from the input
-                    input = utils::Trim(input);
-                    // update delimiter position
-                    delimiter = input.find(kDelimiter);
-                }
-                args.emplace_back(input);
-                
-                assert(!args.empty() && "Args list can't be empty");
-
-                if (!args.front().empty()) {
-                    args.front().remove_prefix(1);
-                }
-
-                if (auto handle = translator_.GetHandle(args.front()); handle) {
-                    Write("Call handle:", args.front(), '\n');
-                    // try to proccess command here
-                    std::invoke(*handle, Translator::Params{++args.begin(), args.end()});
-                }
-                else {
-                    // can not recognize the command, pass it to other services
-                    command::RawCommand raw  { 
-                        std::string { args.front() }, 
-                        std::vector<std::string>{ ++args.begin(), args.end() }
-                    };
-                    if (!inbox_->TryPush(std::move(raw))) {
-                        // abandon the command
-                        Write("fail to proccess command: command storage is full\n");
-                    }
-                }
-
-                Write("  -> parsed: [ "sv, args.front(), ", ... ]\n"sv);
-            }
-        }
-
-        template<class Command>
-        void Execute(Command&& cmd) {
-            if constexpr (std::is_same_v<Command, command::Shutdown>) {
-                assert(inbox_ != nullptr && "Queue can not be NULL");
-                inbox_->DisableSentinel();
-                running_ = false;
-            }
-        }
-
-    private:
-        CcQueue<command::RawCommand> * const inbox_ { nullptr };
-        Translator translator_ {};
-
-        bool running_ { true };
-
-        static inline std::mutex in_ {};
-        static inline std::mutex out_ {};
-    };
     
     // service
     class Blizzard : public std::enable_shared_from_this<Blizzard> {
@@ -149,7 +48,7 @@ namespace temp {
         Blizzard& operator=(Blizzard&&) = delete;
 
         ~Blizzard() {
-            temp::Console::Write("~Blizzard()\n");
+            Console::Write("  -> close blizzard service\n");
             for (auto& t: threads_) t.join();
         }
 
@@ -162,7 +61,7 @@ namespace temp {
                     if (auto self = weak.lock(); self) {
                         self->QueryRealm([weak](size_t realmId) {
                             if (auto self = weak.lock(); self) {
-                                temp::Console::Write("ID acquired:", realmId, '\n');
+                                Console::Write("ID acquired:", realmId, '\n');
                             }
                         });
                     }
@@ -179,10 +78,10 @@ namespace temp {
                     if (auto self = weak.lock(); self) {
                         self->QueryRealm([weak](size_t realmId) {
                             if (auto self = weak.lock(); self) {
-                                temp::Console::Write("ID acquired: ", realmId, '\n');
+                                Console::Write("ID acquired: ", realmId, '\n');
                                 self->QueryRealmStatus(realmId, [weak]() {
                                     if (auto self = weak.lock(); self) {
-                                        temp::Console::Write("Realm confirmed!\n");
+                                        Console::Write("Realm confirmed!\n");
                                     }
                                 });
                             }
@@ -199,7 +98,7 @@ namespace temp {
             else if (std::is_same_v<Command, command::AccessToken>) {
                 AcquireToken([weak = weak_from_this()]() {
                     if (auto self = weak.lock(); self) {
-                        temp::Console::Write("Token acquired.\n");
+                        Console::Write("Token acquired.\n");
                     }
                 });
             }
@@ -222,7 +121,7 @@ namespace temp {
                         }
                         catch (std::exception& ex) {
                             // some system exception
-                            temp::Console::Write("[ERROR]: ", ex.what(), '\n');
+                            Console::Write("[ERROR]: ", ex.what(), '\n');
                         }
                     }
                 });
@@ -245,7 +144,7 @@ namespace temp {
                     const auto realmId = reader["id"].GetUint64();
 
                     if (auto service = self.lock(); service) {
-                        temp::Console::Write("Realm id: [", realmId, "]\n");
+                        Console::Write("Realm id: [", realmId, "]\n");
                         if (callback) {
                             boost::asio::post(*service->context_, std::bind(callback, realmId));
                         }
@@ -270,7 +169,7 @@ namespace temp {
                     const auto [head, body] = origin->AcquireResponse();
 
                     if (auto service = self.lock(); service) {
-                        temp::Console::Write("Body:\n", body, "\n");
+                        Console::Write("Body:\n", body, "\n");
                         if (callback) {
                             boost::asio::post(*service->context_, callback);
                         }
@@ -307,7 +206,7 @@ namespace temp {
                     assert(!strcmp(tokenType, "bearer") && "Unexpected token type. Blizzard API may be changed!");
 
                     if (auto service = self.lock(); service) {
-                        temp::Console::Write("Extracted token: [", token, "]\n");
+                        Console::Write("Extracted token: [", token, "]\n");
                         service->token_.Emplace(std::move(token), Token::Duration_t(expires));
 
                         if (callback) {
@@ -367,7 +266,7 @@ public:
         boost::system::error_code error;
         ssl_->load_verify_file(kVerifyFilePath, error);
         if (error) {
-            temp::Console::Write("[ERROR]: ", error.message(), '\n');
+            Console::Write("[ERROR]: ", error.message(), '\n');
         }
         using namespace std::literals::string_view_literals;
 
@@ -393,7 +292,7 @@ public:
                 while (true) {
                     auto cmd { commands_.TryPop() };
                     if (!cmd) {
-                        temp::Console::Write("  -> queue is empty\n");
+                        Console::Write("  -> queue is empty\n");
                         break;
                     }
                     if (auto handle = translator_.GetHandle(cmd->command_); handle) {
@@ -403,7 +302,7 @@ public:
                         });
                     }
                     else {
-                        temp::Console::Write("Can not recognize a command:", cmd->command_);
+                        Console::Write("Can not recognize a command:", cmd->command_);
                     }
                 }
             });
@@ -427,7 +326,7 @@ private:
     std::shared_ptr<ssl::context> ssl_;
     // services:
     std::shared_ptr<temp::Blizzard> blizzard_;
-    temp::Console console_;
+    Console console_;
 };
 
 int main() {
