@@ -14,34 +14,32 @@ namespace command {
     };
 
     struct RealmID {
-        static RealmID Create([[maybe_unused]] const std::vector<std::string_view>& params) {
-            return RealmID{};
+        static RealmID Create(const std::vector<std::string_view>&) {
+            return {};
         }
     };
 
     struct RealmStatus {
-        static RealmStatus Create([[maybe_unused]] const std::vector<std::string_view>& params) {
-            return RealmStatus{};
+        static RealmStatus Create(const std::vector<std::string_view>&) {
+            return {};
         }
     };
 
     struct AccessToken {
-        static AccessToken Create([[maybe_unused]] const std::vector<std::string_view>& params) {
-            return AccessToken{};
+        static AccessToken Create(const std::vector<std::string_view>&) {
+            return {};
         }
     };
 
     struct Shutdown {
-        static Shutdown Create(const std::vector<std::string_view>& params) {
-            // TODO: parse!
-            return { };
+        static Shutdown Create(const std::vector<std::string_view>&) {
+            return {};
         }
     };
 
     struct Help {
-        static Help Create(const std::vector<std::string_view>& params) {
-            // TODO: parse!
-            return { };
+        static Help Create(const std::vector<std::string_view>&) {
+            return {};
         }
     };
 
