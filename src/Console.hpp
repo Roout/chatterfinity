@@ -7,8 +7,6 @@
 #include "Translator.hpp"
 #include "ConcurrentQueue.hpp"
 
-class Invoker;
-
 // This is source of input 
 class Console {
 public:
@@ -31,11 +29,13 @@ public:
     // blocks execution thread
     void Run();
 
-    template<class Command>
+    template<typename Command,
+        typename = std::enable_if_t<command::details::is_console_api_v<Command>>
+    >
     void Execute(Command&& cmd);
 
 private:
-    friend class Invoker;
+    class Invoker;
 
     CcQueue<command::RawCommand> * const inbox_ { nullptr };
     Translator translator_ {};
@@ -48,13 +48,27 @@ private:
     static inline std::mutex out_ {};
 };
 
-template<class ...Args>
+
+class Console::Invoker {
+public:
+    Console::Invoker(Console *console) : console_ { console } {}
+
+    void Execute(command::Shutdown);
+    
+    void Execute(command::Help);
+
+private:
+    Console * const console_ { nullptr };
+};
+
+
+template<typename ...Args>
 inline void Console::Write(Args&&...args) {
     std::lock_guard<std::mutex> lock { out_ };
     ((std::cout << std::forward<Args>(args) << " "), ...);
 }
 
-template<class Command>
+template<typename Command, typename Enable>
 inline void Console::Execute(Command&& cmd) {
     invoker_->Execute(std::forward<Command>(cmd));
 }
