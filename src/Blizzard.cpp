@@ -1,4 +1,5 @@
 #include "Blizzard.hpp"
+#include "Console.hpp"
 
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
@@ -8,6 +9,7 @@ Blizzard::Blizzard(std::shared_ptr<ssl::context> ssl)
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , sslContext_ { ssl }
+    , invoker_ { std::make_unique<Invoker>(this) }
 {
 }
 
@@ -128,4 +130,53 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
         }
     });
 
+}
+
+void Blizzard::Invoker::Execute(command::RealmID) {
+    auto initiateRealmQuery = [weak = blizzard_->weak_from_this()]() {
+        if (auto self = weak.lock(); self) {
+            self->QueryRealm([weak](size_t realmId) {
+                if (auto self = weak.lock(); self) {
+                    Console::Write("ID acquired:", realmId, '\n');
+                }
+            });
+        }
+    };
+    if (!blizzard_->token_.IsValid()) {
+        blizzard_->AcquireToken(std::move(initiateRealmQuery));
+    }
+    else {
+        std::invoke(initiateRealmQuery);
+    }
+}
+
+void Blizzard::Invoker::Execute(command::RealmStatus) {
+    auto initiateRealmQuery = [weak = blizzard_->weak_from_this()]() {
+            if (auto self = weak.lock(); self) {
+                self->QueryRealm([weak](size_t realmId) {
+                    if (auto self = weak.lock(); self) {
+                        Console::Write("ID acquired: ", realmId, '\n');
+                        self->QueryRealmStatus(realmId, [weak]() {
+                            if (auto self = weak.lock(); self) {
+                                Console::Write("Realm confirmed!\n");
+                            }
+                        });
+                    }
+                });
+            }
+        };
+        if (!blizzard_->token_.IsValid()) {
+            blizzard_->AcquireToken(std::move(initiateRealmQuery));
+        }
+        else {
+            std::invoke(initiateRealmQuery);
+        }
+}
+
+void Blizzard::Invoker::Execute(command::AccessToken) {
+    blizzard_->AcquireToken([weak = blizzard_->weak_from_this()]() {
+        if (auto self = weak.lock(); self) {
+            Console::Write("Token acquired.\n");
+        }
+    });
 }

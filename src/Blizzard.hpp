@@ -7,7 +7,6 @@
 #include <boost/asio/ssl.hpp>
 
 #include "Command.hpp"
-#include "Console.hpp" // TODO: remove this header
 #include "Connection.hpp"
 #include "Request.hpp"
 #include "Token.hpp"
@@ -31,7 +30,7 @@ public:
     template<typename Command,
         typename = std::enable_if_t<command::details::is_blizzard_api_v<Command>>
     >
-    void Execute([[maybe_unused]] Command& cmd);
+    void Execute(Command&& cmd);
 
     void ResetWork();
 
@@ -44,6 +43,8 @@ public:
     void AcquireToken(std::function<void()> continuation = {});
 
 private:
+    class Invoker;
+
     using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
     
     size_t GenerateId() const;
@@ -57,64 +58,26 @@ private:
     std::shared_ptr<ssl::context> sslContext_;
 
     Config config_;
-
+    std::unique_ptr<Invoker> invoker_;
     // connection id
     static inline size_t lastID_ { 0 };
 };
 
-template<typename Command,
-    typename Enable // = std::enable_if_t<command::details::is_blizzard_api_v<Command>>
->
-inline void Blizzard::Execute([[maybe_unused]] Command& cmd) {
-    if constexpr (std::is_same_v<Command, command::RealmID>) {
-        auto initiateRealmQuery = [weak = weak_from_this()]() {
-            if (auto self = weak.lock(); self) {
-                self->QueryRealm([weak](size_t realmId) {
-                    if (auto self = weak.lock(); self) {
-                        Console::Write("ID acquired:", realmId, '\n');
-                    }
-                });
-            }
-        };
-        if (!token_.IsValid()) {
-            AcquireToken(std::move(initiateRealmQuery));
-        }
-        else {
-            std::invoke(initiateRealmQuery);
-        }
-    }
-    else if (std::is_same_v<Command, command::RealmStatus>) {
-        auto initiateRealmQuery = [weak = weak_from_this()]() {
-            if (auto self = weak.lock(); self) {
-                self->QueryRealm([weak](size_t realmId) {
-                    if (auto self = weak.lock(); self) {
-                        Console::Write("ID acquired: ", realmId, '\n');
-                        self->QueryRealmStatus(realmId, [weak]() {
-                            if (auto self = weak.lock(); self) {
-                                Console::Write("Realm confirmed!\n");
-                            }
-                        });
-                    }
-                });
-            }
-        };
-        if (!token_.IsValid()) {
-            AcquireToken(std::move(initiateRealmQuery));
-        }
-        else {
-            std::invoke(initiateRealmQuery);
-        }
-    }
-    else if (std::is_same_v<Command, command::AccessToken>) {
-        AcquireToken([weak = weak_from_this()]() {
-            if (auto self = weak.lock(); self) {
-                Console::Write("Token acquired.\n");
-            }
-        });
-    }
-    else {
-        assert(false && "Unreachable: Unknown blizzard command");
-    }
+class Blizzard::Invoker {
+public:
+    Blizzard::Invoker(Blizzard *blizzard) : blizzard_ { blizzard } {}
+
+    void Execute(command::RealmID);
+    void Execute(command::RealmStatus);
+    void Execute(command::AccessToken);
+
+private:
+    Blizzard * const blizzard_ { nullptr };
+};
+
+template<typename Command, typename Enable>
+inline void Blizzard::Execute(Command&& cmd) {
+    invoker_->Execute(std::forward<Command>(cmd));
 }
 
 inline size_t Blizzard::GenerateId() const {
