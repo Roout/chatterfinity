@@ -80,7 +80,17 @@ void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuati
             const auto [head, body] = origin->AcquireResponse();
 
             if (auto service = self.lock(); service) {
-                Console::Write("Body:\n", body, "\n");
+                rapidjson::Document reader; 
+                reader.Parse(body.data(), body.size());
+                const auto realms = reader["realms"].GetArray();
+                assert(!realms.Empty());    
+                const auto& front = *realms.Begin();
+                const std::string name = front["name"].GetString();
+                const auto hasQueue = reader["has_queue"].GetBool();
+                const std::string status = reader["status"]["type"].GetString();
+
+                Console::Write(name, "(", status, "):", hasQueue? "\"has queue\"": "\"no queue\"\n");
+
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
                 }
