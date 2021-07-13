@@ -4,6 +4,7 @@
 Console::Console(CcQueue<command::RawCommand> * inbox) 
     : inbox_ { inbox }
     , translator_ {}
+    , invoker_ { std::make_unique<Invoker>(this) }
 {
     assert(inbox_ != nullptr);
 
@@ -81,4 +82,32 @@ void Console::Run() {
 
         Write("  -> parsed: [ "sv, args.front(), ", ... ]\n"sv);
     }
+}
+
+class Invoker {
+public:
+    Invoker(Console *console) : console_ { console } {}
+
+    void Execute(command::Shutdown);
+    
+    void Execute(command::Help);
+
+private:
+    Console * const console_ { nullptr };
+};
+
+void Invoker::Execute(command::Shutdown) {
+    assert(console_->inbox_ != nullptr && "Queue can not be NULL");
+    console_->inbox_->DisableSentinel();
+    console_->running_ = false;
+}
+
+void Invoker::Execute(command::Help) {
+    Console::Write("available commands:\n"
+        "\t!shutdown - exit the application\n"
+        "\t!help - show existing commands\n"
+        "\t!token - acquire token fromn blizzard\n"
+        "\t!realm-id - get id of the [flamegor] realm\n"
+        "\t!realm-status - get status of the [flamegor] realm\n"
+    );
 }

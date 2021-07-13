@@ -7,6 +7,8 @@
 #include "Translator.hpp"
 #include "ConcurrentQueue.hpp"
 
+class Invoker;
+
 // This is source of input 
 class Console {
 public:
@@ -33,10 +35,14 @@ public:
     void Execute(Command&& cmd);
 
 private:
+    friend class Invoker;
+
     CcQueue<command::RawCommand> * const inbox_ { nullptr };
     Translator translator_ {};
 
     bool running_ { true };
+
+    std::unique_ptr<Invoker> invoker_;
 
     static inline std::mutex in_ {};
     static inline std::mutex out_ {};
@@ -50,18 +56,5 @@ inline void Console::Write(Args&&...args) {
 
 template<class Command>
 inline void Console::Execute(Command&& cmd) {
-    if constexpr (std::is_same_v<Command, command::Shutdown>) {
-        assert(inbox_ != nullptr && "Queue can not be NULL");
-        inbox_->DisableSentinel();
-        running_ = false;
-    }
-    else if (std::is_same_v<Command, command::Help>) {
-        Write("available commands:\n"
-            "\t!shutdown - exit the application\n"
-            "\t!help - show existing commands\n"
-            "\t!token - acquire token fromn blizzard\n"
-            "\t!realm-id - get id of the [flamegor] realm\n"
-            "\t!realm-status - get status of the [flamegor] realm\n"
-        );
-    }
+    invoker_->Execute(std::forward<Command>(cmd));
 }
