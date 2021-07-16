@@ -52,7 +52,7 @@ private:
     static constexpr size_t kThreads { 2 };
     std::vector<std::thread> threads_;
 
-    Token token_;
+    AccessToken token_;
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;
     std::shared_ptr<ssl::context> sslContext_;

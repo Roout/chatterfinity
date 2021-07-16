@@ -128,7 +128,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
 
             if (auto service = self.lock(); service) {
                 Console::Write("Extracted token: [", token, "]\n");
-                service->token_.Emplace(std::move(token), Token::Duration(expires));
+                service->token_.Emplace(std::move(token), AccessToken::Duration(expires));
 
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
