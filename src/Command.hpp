@@ -63,17 +63,32 @@ namespace command {
         };
 
         template<typename T>
+        struct is_twitch_api {
+            static constexpr bool value { 
+                std::is_same_v<T, Shutdown>
+                || std::is_same_v<T, Help>
+                || std::is_same_v<T, AccessToken>
+            };
+        };
+
+        template<typename T>
         constexpr bool is_blizzard_api_v = is_blizzard_api<T>::value;
         template<typename T>
         constexpr bool is_console_api_v = is_console_api<T>::value;
+        template<typename T>
+        constexpr bool is_twitch_api_v = is_twitch_api<T>::value;
+
+        template<typename T>
+        constexpr bool is_service_v { is_blizzard_api_v<T>
+            || is_console_api_v<T>
+            || is_twitch_api_v<T>
+        };
     }
 
 // Helper functions:
     template<typename Command, typename Executor>
     void Execute(Command&& cmd, Executor& ex) {
-        static_assert(details::is_blizzard_api_v<Command> 
-            || details::is_console_api_v<Command>, "Trying to execute unknown command"
-        );
+        static_assert(details::is_service_v<Command>, "Trying to execute unknown command");
         ex.Execute(std::forward<Command>(cmd));
     }
 
