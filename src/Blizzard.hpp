@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-#include <cassert>
 #include <functional>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -10,15 +8,16 @@
 #include "Connection.hpp"
 #include "Request.hpp"
 #include "Token.hpp"
-#include "Config.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
-    
+
+class Config;
+
 // service
 class Blizzard : public std::enable_shared_from_this<Blizzard> {
 public:
-    Blizzard(std::shared_ptr<ssl::context> ssl);
+    Blizzard(const Config *config);
 
     Blizzard(const Blizzard&) = delete;
     Blizzard(Blizzard&&) = delete;
@@ -55,10 +54,10 @@ private:
     AccessToken token_;
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;
-    std::shared_ptr<ssl::context> sslContext_;
+    std::shared_ptr<ssl::context> ssl_;
 
-    Config config_;
     std::unique_ptr<Invoker> invoker_;
+    const Config * const config_ { nullptr };
     // connection id
     static inline size_t lastID_ { 0 };
 };

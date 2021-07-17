@@ -19,8 +19,11 @@ list(APPEND headers
 	"src/Config.hpp"
 	"src/Translator.hpp"
 	"src/Command.hpp"
+	
 	"src/Console.hpp"
 	"src/Blizzard.hpp"
+	"src/Twitch.hpp"
+
 	"src/Executor.hpp"
 	"src/ConcurrentQueue.hpp"
 )
@@ -29,8 +32,12 @@ list(APPEND sources
 	"src/main.cpp"
 	"src/Request.cpp"
 	"src/Response.cpp"
+	"src/Config.cpp"
+	
 	"src/Console.cpp"
 	"src/Blizzard.cpp"
+	"src/Twitch.cpp"
+	
 	"src/Connection.cpp"
 )
 
@@ -74,7 +81,7 @@ target_compile_options(${This} PRIVATE
 # copy *.pem to folder with binary
 set(Configs
   "DigiCertHighAssuranceEVRootCA.crt.pem"
-  "secret/secrets.cfg"
+  "secret/secrets.json"
 )
 
 foreach(config ${Configs})

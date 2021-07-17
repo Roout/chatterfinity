@@ -9,6 +9,7 @@
 #include "Translator.hpp"
 #include "Console.hpp"
 #include "Blizzard.hpp"
+#include "Config.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
@@ -17,25 +18,10 @@ class App {
 public:
     App() 
         : commands_ { kSentinel }
-        , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
-        , blizzard_ { std::make_shared<Blizzard>(ssl_) }
+        , config_ { kConfigPath }
+        , blizzard_ { std::make_shared<Blizzard>(&config_) }
         , console_ { &commands_ }
     {
-        const char * const kVerifyFilePath = "DigiCertHighAssuranceEVRootCA.crt.pem";
-        /**
-         * [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
-         * Cert Chain:
-         * DigiCert High Assurance EV Root CA => DigiCert SHA2 High Assurance Server CA => *.battle.net
-         * So root cert is DigiCert High Assurance EV Root CA;
-         * Valid until: 10/Nov/2031
-         * 
-         * TODO: read this path from secret + with some chiper
-        */
-        boost::system::error_code error;
-        ssl_->load_verify_file(kVerifyFilePath, error);
-        if (error) {
-            Console::Write("[ERROR]: ", error.message(), '\n');
-        }
         using namespace std::literals::string_view_literals;
 
         std::initializer_list<Translator::Pair> list {
@@ -44,6 +30,8 @@ public:
             {"token"sv,         Translator::CreateHandle<command::AccessToken>(*blizzard_) }
         };
         translator_.Insert(list);
+
+        config_.Read();
     }
 
     ~App() {
@@ -60,7 +48,7 @@ public:
                 while (true) {
                     auto cmd { commands_.TryPop() };
                     if (!cmd) {
-                        Console::Write("  -> queue is empty\n");
+                        Console::Write(std::this_thread::get_id(), ":  -> queue is empty\n");
                         break;
                     }
                     if (auto handle = translator_.GetHandle(cmd->command_); handle) {
@@ -86,12 +74,14 @@ public:
 private:
     static constexpr bool kSentinel { true };
     static constexpr std::size_t kWorkerCount { 2 };
+    static constexpr char * const kConfigPath { "secret/secrets.json" };
+
     std::vector<std::thread> workers_;
     // common queue
     CcQueue<command::RawCommand> commands_;
     Translator translator_;
-    // ssl
-    std::shared_ptr<ssl::context> ssl_;
+    // configuration and settings
+    Config config_;
     // services:
     std::shared_ptr<Blizzard> blizzard_;
     Console console_;
