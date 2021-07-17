@@ -1,6 +1,7 @@
 #include "Blizzard.hpp"
 #include "Console.hpp"
 #include "Config.hpp"
+#include "Request.hpp"
 
 #include <exception>
 

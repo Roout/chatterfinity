@@ -6,7 +6,6 @@
 
 #include "Command.hpp"
 #include "Connection.hpp"
-#include "Request.hpp"
 #include "Token.hpp"
 
 namespace ssl = boost::asio::ssl;
@@ -36,18 +35,20 @@ public:
 
     void Run();
 
+private:
+
     void QueryRealm(std::function<void(size_t realmId)> continuation = {}) const;
 
     void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {}) const;
 
     void AcquireToken(std::function<void()> continuation = {});
 
+    size_t GenerateId() const;
+
 private:
     class Invoker;
 
     using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
-    
-    size_t GenerateId() const;
 
     static constexpr size_t kThreads { 2 };
     std::vector<std::thread> threads_;
@@ -84,4 +85,4 @@ inline size_t Blizzard::GenerateId() const {
     return Blizzard::lastID_++;
 }
 
-}
+} // namespace service
