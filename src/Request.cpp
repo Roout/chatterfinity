@@ -55,6 +55,25 @@ namespace {
     };
 }
 
+namespace twitch {
+
+std::string CredentialsExchange::Build() const {
+    const char* bodyTemplate = "{\"client_id\":\"%1%\", \"client_secret\":\"%2%\", \"grant_type\": \"client_credentials\"}";
+    auto body { (boost::format(bodyTemplate) 
+        % id_ 
+        % secret_
+    ).str() };
+    const char *requestTemplate = 
+        "POST /oauth2/token HTTP/1.1\r\n"
+        "Host: id.twitch.tv\r\n"                
+        "Content-Type: application/json\r\n"
+        "Content-Length: %1%\r\n"
+        "\r\n";
+    return (boost::format(requestTemplate) % body.size()).str() + body;
+}
+
+}
+
 namespace blizzard {
 
 std::string CredentialsExchange::Build() const {

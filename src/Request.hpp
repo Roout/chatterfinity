@@ -3,6 +3,37 @@
 #include <string_view>
 #include <string>
 
+class Query {
+public:
+    virtual ~Query() = default;
+
+    virtual std::string Build() const = 0;
+};
+
+namespace twitch {
+    /*
+     * 1. Get Access Token
+     * in: client_id, client_secret
+     * out: access_token, token_type, expires_in
+     **/
+    class CredentialsExchange : public Query {
+    public:
+        CredentialsExchange(const std::string& id, const std::string& secret) 
+            : id_ { id }
+            , secret_ { secret }
+        {
+        }
+
+        std::string Build() const override;
+
+    private:
+        // client credentials
+        std::string id_;
+        std::string secret_;
+    };
+
+}
+
 namespace blizzard {
 
     constexpr std::string_view SERVER_SLUG  = "flamegor";
@@ -14,13 +45,6 @@ namespace blizzard {
         NAMESPACE[NAMESPACE.size() - 2] == REGION[0] && NAMESPACE.back() == REGION.back()
         , "Region mismatch"
     );
-
-    class Query {
-    public:
-        virtual ~Query() = default;
-
-        virtual std::string Build() const = 0;
-    };
 
     /*
      * 1. Get Access Token
