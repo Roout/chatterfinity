@@ -81,6 +81,7 @@ target_compile_options(${This} PRIVATE
 # copy *.pem to folder with binary
 set(Configs
   "DigiCertHighAssuranceEVRootCA.crt.pem"
+  "StarfieldServicesRootCA.crt.pem"
   "secret/secrets.json"
 )
 
