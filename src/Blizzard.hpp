@@ -14,7 +14,8 @@ using boost::asio::ip::tcp;
 
 class Config;
 
-// service
+namespace service {
+
 class Blizzard : public std::enable_shared_from_this<Blizzard> {
 public:
     Blizzard(const Config *config);
@@ -81,4 +82,6 @@ inline void Blizzard::Execute(Command&& cmd) {
 
 inline size_t Blizzard::GenerateId() const {
     return Blizzard::lastID_++;
+}
+
 }

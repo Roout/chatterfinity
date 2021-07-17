@@ -19,7 +19,7 @@ public:
     App() 
         : commands_ { kSentinel }
         , config_ { kConfigPath }
-        , blizzard_ { std::make_shared<Blizzard>(&config_) }
+        , blizzard_ { std::make_shared<service::Blizzard>(&config_) }
         , console_ { &commands_ }
     {
         using namespace std::literals::string_view_literals;
@@ -83,7 +83,7 @@ private:
     // configuration and settings
     Config config_;
     // services:
-    std::shared_ptr<Blizzard> blizzard_;
+    std::shared_ptr<service::Blizzard> blizzard_;
     Console console_;
 };
 

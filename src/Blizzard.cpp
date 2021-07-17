@@ -6,6 +6,8 @@
 
 #include "rapidjson/document.h"
 
+namespace service {
+
 Blizzard::Blizzard(const Config *config) 
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
@@ -218,3 +220,6 @@ void Blizzard::Invoker::Execute(command::AccessToken) {
         }
     });
 }
+
+
+} // service
