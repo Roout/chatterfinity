@@ -4,6 +4,7 @@
 #include <boost/asio/ssl.hpp>
 
 #include <memory>
+#include <functional>
 #include <vector>
 #include <thread>
 
@@ -16,7 +17,7 @@ namespace service {
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
-class Twitch {
+class Twitch : public std::enable_shared_from_this<Twitch> {
 public:
     Twitch(const Config *config);
     ~Twitch();
@@ -33,6 +34,10 @@ public:
     void Execute(Command&& cmd);
 
     void ResetWork();
+
+private:
+
+    void AcquireToken(std::function<void()> continuation = {});
 
 private:
     class Invoker;
