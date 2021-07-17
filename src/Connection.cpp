@@ -19,7 +19,7 @@ Connection::Connection(io_context_pointer context
     , socket_ { *context, *sslContext }
     , id_ { id }
     , host_ { host }
-    , log_ { std::make_shared<Log>( (boost::format("connection_%1%.txt") % id).str().data() ) }
+    , log_ { std::make_shared<Log>( (boost::format("%1%connection_%2%.txt") % host % id).str().data() ) }
 {
     // Perform SSL handshake and verify the remote host's certificate.
     socket_.set_verify_mode(ssl::verify_peer);
@@ -30,7 +30,7 @@ Connection::~Connection() {
     // No need to call `close` through executor via `boost::asio::post(...)`
     // because last instance of `shared_ptr` is already destroyed
     Close();
-    log_->Write(LogType::info, "Connection destroyed\n"); 
+    log_->Write(LogType::info, "destroyed\n"); 
 }
 
 void Connection::InitiateSocketShutdown() {
