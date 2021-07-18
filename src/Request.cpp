@@ -72,7 +72,41 @@ std::string CredentialsExchange::Build() const {
     return (boost::format(requestTemplate) % body.size()).str() + body;
 }
 
+// https://dev.twitch.tv/docs/authentication#sending-user-access-and-app-access-tokens
+std::string Authentication::Build() const {
+    const char *requestTemplate = 
+        "GET /helix/ HTTP/1.1\r\n"
+        "Host: api.twitch.tv\r\n"
+        "Authorization: Bearer %1%\r\n"
+        "\r\n";
+    
+    return (boost::format(requestTemplate) % token_).str();
 }
+
+std::string TokenRevoke::Build() const {
+    const char* bodyTemplate = "{\"client_id\":\"%1%\", \"token\":\"%2%\"}";
+    auto body { (boost::format(bodyTemplate) % id_ % token_).str() };
+    const char *requestTemplate = 
+        "POST /oauth2/revoke HTTP/1.1\r\n"
+        "Host: id.twitch.tv\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: %1%\r\n"
+        "\r\n";
+
+    return (boost::format(requestTemplate) % body.size()).str() + body;
+}
+
+std::string Validation::Build() const {
+    const char *requestTemplate = 
+        "GET /oauth2/validate HTTP/1.1\r\n"
+        "Host: id.twitch.tv\r\n"
+        "Authorization: OAuth %1%\r\n"
+        "\r\n";
+    
+    return (boost::format(requestTemplate) % token_).str();
+}
+
+} // namespace twtich
 
 namespace blizzard {
 

@@ -32,6 +32,50 @@ namespace twitch {
         std::string secret_;
     };
 
+    // App Access token (Credential User Flow)
+    class Authentication : public Query {
+    public:
+
+        Authentication(const std::string& token)
+            : token_ { token }
+        {}
+
+        std::string Build() const override;
+
+    private:
+        std::string token_;
+    };
+
+    class TokenRevoke : public Query {
+    public:
+
+        TokenRevoke(const std::string& id, const std::string& token)
+            : id_ { id }
+            , token_ { token }
+        {}
+
+        std::string Build() const override;
+
+    private:
+        std::string id_;
+        std::string token_;
+    };
+
+    // validate App access tokens
+    // https://dev.twitch.tv/docs/authentication#getting-tokens
+    // https://dev.twitch.tv/docs/authentication#validating-requests
+    class Validation : public Query {
+    public:
+
+        Validation(const std::string& token)
+            : token_ { token }
+        {}
+
+        std::string Build() const override;
+
+    private:
+        std::string token_;
+    };
 }
 
 namespace blizzard {
