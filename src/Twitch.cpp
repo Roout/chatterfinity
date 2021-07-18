@@ -88,7 +88,7 @@ void Twitch::AcquireToken(std::function<void()> continuation) {
                     "access_token": "<user access token>",
                     "refresh_token": "",
                     "expires_in": <number of seconds until the token expires>,
-                    "scope": ["<your previously listed scope(s)>"],
+                    "scope": ["char:read chat:edit"],
                     "token_type": "bearer"
                 }
             */

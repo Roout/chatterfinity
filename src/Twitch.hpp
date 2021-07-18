@@ -17,6 +17,21 @@ namespace service {
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
+
+/**
+ * NOTE:
+ *  - Uses Client credentials flow
+ *  https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#oauth-client-credentials-flow
+ *  - 
+ * 
+ * TODO: 
+ * - [ ] validation: can add field "last_validation" to Token and check it before queries
+ *  You must validate access tokens before making API requests 
+ *  which perform mutations on or access sensitive information of users, 
+ *  if it has been more than one hour since the last validation. 
+ * - [ ] save token:
+ *  Token can last quite a lot so I don't need to request new one each time
+ */
 class Twitch : public std::enable_shared_from_this<Twitch> {
 public:
     Twitch(const Config *config);
