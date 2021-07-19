@@ -5,7 +5,6 @@
 #include <boost/asio/ssl.hpp>
 
 #include "Command.hpp"
-#include "Connection.hpp"
 #include "Token.hpp"
 
 namespace ssl = boost::asio::ssl;
@@ -41,9 +40,9 @@ public:
 
 private:
 
-    void QueryRealm(std::function<void(size_t realmId)> continuation = {}) const;
+    void QueryRealm(std::function<void(size_t realmId)> continuation = {});
 
-    void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {}) const;
+    void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {});
 
     void AcquireToken(std::function<void()> continuation = {});
 
