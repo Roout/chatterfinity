@@ -27,21 +27,20 @@ public:
         , std::string_view host
     );
 
+    virtual ~Connection();
+
     Connection(Connection&&) = delete;
     Connection& operator=(Connection&&) = delete;
     Connection(Connection const&) = delete;
     Connection& operator=(Connection const&) = delete;
-    ~Connection();
 
     void Close();
 
     void Write(std::string text, std::function<void()> onSuccess = {});
 
-    net::http::Message AcquireResponse() noexcept;
+    virtual void Read(std::function<void()> onSuccess = {}) = 0;
 
-private:
-
-    void ReadHeader();
+protected:
 
     void WriteBuffer();
 
@@ -53,6 +52,45 @@ private:
 
     void OnWrite(const boost::system::error_code& error, size_t bytes);
 
+    // TODO: temporary stuff; used while the exception system/error handling is not implemented
+    // Just `post` `Connection::Close` through `strand`
+    void InitiateSocketShutdown();
+
+protected:
+
+    static constexpr std::string_view kService { "https" };
+
+    // === Boost IO stuff ===
+    io_context_pointer context_ { nullptr };
+    ssl_context_pointer sslContext_ { nullptr };
+    tcp::resolver resolver_;
+    boost::asio::io_context::strand strand_;
+    ssl::stream<tcp::socket> socket_;
+    
+    // === Connection details === 
+    const size_t id_ { 0 };
+    const std::string host_ {};
+    std::shared_ptr<Log> log_ { nullptr };
+    std::function<void()> onWriteSuccess_;
+    std::function<void()> onReadSuccess_;
+
+    // === Write ===
+    std::string outbox_;
+};
+
+class HttpConnection: public Connection {
+public:
+
+    using Connection::Connection;
+
+    void Read(std::function<void()> onSuccess) override;
+
+    net::http::Message AcquireResponse() noexcept {
+        return { std::move(header_), std::move(body_) };
+    }
+private:
+    void ReadHeader();
+
     void OnHeaderRead(const boost::system::error_code& error, size_t bytes);
 
     void ReadIntactBody();
@@ -63,12 +101,8 @@ private:
 
     void OnReadChunkedBody(const boost::system::error_code& error, size_t bytes);
 
-    // TODO: temporary stuff; used while the exception system/error handling is not implemented
-    // Just `post` `Connection::Close` through `strand`
-    void InitiateSocketShutdown();
-
 private:
-    struct Chunk {
+    struct Chunk final {
         // size of chunk
         size_t size_ { 0 };
         // number of consumed (processed) chunks
@@ -83,25 +117,44 @@ private:
     static constexpr std::string_view kCRLF { "\r\n" };
     static constexpr std::string_view kHeaderDelimiter { "\r\n\r\n" };
 
-    // === Boost IO stuff ===
-    io_context_pointer context_ { nullptr };
-    ssl_context_pointer sslContext_ { nullptr };
-    tcp::resolver resolver_;
-    boost::asio::io_context::strand strand_;
-    ssl::stream<tcp::socket> socket_;
-    
-    // === Connection details === 
-    const size_t id_ { 0 };
-    const std::string host_ {};
-    std::shared_ptr<Log> log_ { nullptr };
-    std::function<void()> onSuccess_;
-
-    // === Read ===
+    // buffers
     boost::asio::streambuf inbox_;
-    net::http::Header header_;
     Chunk chunk_;
+    net::http::Header header_;
     net::http::Body body_;
-
-    // === Write ===
-    std::string outbox_;
 };
+
+class IrcConnection: public Connection {
+public:
+
+    using Connection::Connection;
+
+    void Read(std::function<void()> onSuccess) override;
+
+    net::irc::Message AcquireResponse() noexcept {
+        return std::move(message_);
+    }
+private:
+    void OnRead(const boost::system::error_code& error, size_t bytes);
+
+    static constexpr std::string_view kCRLF { "\r\n" };
+ 
+    boost::asio::streambuf inbox_;
+    net::irc::Message message_;
+};
+
+namespace utils {
+    template <typename Derived, 
+        typename = std::enable_if_t<std::is_base_of_v<Connection, Derived>>
+    >
+    inline std::shared_ptr<Derived> SharedFrom(const std::shared_ptr<Connection>& base) {
+        return std::static_pointer_cast<Derived>(base);
+    }
+
+    template <typename Derived, 
+        typename = std::enable_if_t<std::is_base_of_v<Connection, Derived>>
+    >
+    inline std::weak_ptr<Derived> WeakFrom(const std::shared_ptr<Connection>& base) {
+        return std::static_pointer_cast<Derived>(base);
+    }
+}

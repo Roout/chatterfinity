@@ -58,8 +58,14 @@ namespace {
 namespace twitch {
 
 std::string CredentialsExchange::Build() const {
-    const char* bodyTemplate = "{\"client_id\":\"%1%\", \"client_secret\":\"%2%\", \"grant_type\": \"client_credentials\"}";
-    auto body { (boost::format(bodyTemplate) 
+    const char* bodyTemplate = 
+        "{"
+            " \"client_id\": \"%1%\","
+            " \"client_secret\": \"%2%\","
+            " \"grant_type\": \"client_credentials\","
+            " \"scope\": \"chat:read chat:edit\""
+        "}";
+    const auto body { (boost::format(bodyTemplate) 
         % id_ 
         % secret_
     ).str() };
@@ -85,7 +91,7 @@ std::string Authentication::Build() const {
 
 std::string TokenRevoke::Build() const {
     const char* bodyTemplate = "{\"client_id\":\"%1%\", \"token\":\"%2%\"}";
-    auto body { (boost::format(bodyTemplate) % id_ % token_).str() };
+    const auto body { (boost::format(bodyTemplate) % id_ % token_).str() };
     const char *requestTemplate = 
         "POST /oauth2/revoke HTTP/1.1\r\n"
         "Host: id.twitch.tv\r\n"
@@ -121,7 +127,7 @@ std::string CredentialsExchange::Build() const {
         "grant_type=client_credentials";
     
     return (boost::format(requestTemplate) 
-        % REGION 
+        % kRegion 
         % UrlBase64::Encode(id_ + ':' + secret_)
     ).str();
 }
@@ -135,10 +141,10 @@ std::string Realm::Build() const {
             "\r\n";
     
     return (boost::format(requestTemplate) 
-        % SERVER_SLUG 
-        % NAMESPACE
-        % LOCALE
-        % REGION
+        % kServerSlug 
+        % kNamespace
+        % kLocale
+        % kRegion
         % token_
     ).str();
 }
@@ -152,9 +158,9 @@ std::string RealmStatus::Build() const {
     
     return (boost::format(requestTemplate) 
         % connetedRealmId_
-        % NAMESPACE
-        % LOCALE
-        % REGION
+        % kNamespace
+        % kLocale
+        % kRegion
         % token_
     ).str();
 }

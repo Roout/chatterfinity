@@ -11,6 +11,9 @@ public:
 };
 
 namespace twitch {
+    static constexpr std::string_view   kHost = "irc.chat.twitch.tv";
+    static constexpr std::uint16_t      kPort = 6697;
+    
     /*
      * 1. Get Access Token
      * in: client_id, client_secret
@@ -80,13 +83,13 @@ namespace twitch {
 
 namespace blizzard {
 
-    constexpr std::string_view SERVER_SLUG  = "flamegor";
-    constexpr std::string_view NAMESPACE    = "dynamic-classic-eu";
-    constexpr std::string_view LOCALE       = "en_US";
-    constexpr std::string_view REGION       = "eu";
+    static constexpr std::string_view kServerSlug   = "flamegor";
+    static constexpr std::string_view kNamespace    = "dynamic-classic-eu";
+    static constexpr std::string_view kLocale       = "en_US";
+    static constexpr std::string_view kRegion       = "eu";
 
     static_assert(
-        NAMESPACE[NAMESPACE.size() - 2] == REGION[0] && NAMESPACE.back() == REGION.back()
+        kNamespace[kNamespace.size() - 2] == kRegion[0] && kNamespace.back() == kRegion.back()
         , "Region mismatch"
     );
 

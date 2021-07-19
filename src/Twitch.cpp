@@ -73,44 +73,57 @@ void Twitch::AcquireToken(std::function<void()> continuation) {
     }
 
     auto request = twitch::CredentialsExchange(secret->id_, secret->value_).Build();
-    auto connection = std::make_shared<Connection>(context_, ssl_, kId, kHost);
-
-    connection->Write(request, [self = weak_from_this()
+    auto connection = std::make_shared<HttpConnection>(context_, ssl_, kId, kHost);
+    // TODO: 
+    // Q: Can connection outlive the service? 
+    // A: Shouldn't (service can't be destroyed while the working threads are running. 
+    //  Joining threads means context is not running so connection is nowhere to be stored => ref_count == 0)
+    // Q: 
+    // A: 
+    connection->Write(request, [service = this
         , callback = std::move(continuation)
-        , connection = connection->weak_from_this()
-    ]() mutable {
-        if (auto origin = connection.lock(); origin) {
-            auto [head, body] = origin->AcquireResponse();
-            rapidjson::Document reader; 
-            reader.Parse(body.data(), body.size());
-            /*
-                {
-                    "access_token": "<user access token>",
-                    "refresh_token": "",
-                    "expires_in": <number of seconds until the token expires>,
-                    "scope": ["<your previously listed scope(s)>"],
-                    "token_type": "bearer"
-                }
-            */
-            std::string token = reader["access_token"].GetString();
-            const auto tokenType = reader["token_type"].GetString();
-            const auto expires = reader["expires_in"].GetUint64();
+        , connection = utils::WeakFrom<HttpConnection>(connection)
+    ]() {
+        assert(connection.use_count() == 1 && 
+            "Fail invariant:"
+            "Expected: 1 ref - instance which is executing Connection::OnWrite"
+            "Assertion Failure may be caused by changing the "
+            "(way)|(place where) this callback is being invoked"
+        );
+
+        auto OnReadSuccess = [service
+            , callback = std::move(callback)
+            , connection
+        ]() mutable {
+            assert(connection.use_count() == 1 && 
+                "Fail invariant:"
+                "Expected: 1 ref - instance which is executing Connection::*"
+                "Assertion Failure may be caused by changing the "
+                "(way)|(place where) this callback is being invoked"
+            );
+            auto shared = connection.lock();
+            const auto [head, body] = shared->AcquireResponse();
+            rapidjson::Document json; 
+            json.Parse(body.data(), body.size());
+
+            std::string token = json["access_token"].GetString();
+            const auto tokenType = json["token_type"].GetString();
+            const auto expires = json["expires_in"].GetUint64();
 
             [[maybe_unused]] constexpr auto expectedDuration = 24 * 60 * 60 - 1;
             assert(!strcmp(tokenType, "bearer") && "Unexpected token type. Twitch API may be changed!");
 
-            if (auto service = self.lock(); service) {
-                Console::Write("Extracted token: [", token, "]\n");
-                service->token_.Emplace(std::move(token), AccessToken::Duration(expires));
+            Console::Write("Extracted token: [", token, "]\n");
+            service->token_.Emplace(std::move(token), AccessToken::Duration(expires));
 
-                if (callback) {
-                    boost::asio::post(*service->context_, callback);
-                }
+            if (callback) {
+                boost::asio::post(*service->context_, callback);
             }
-        }
-        else {
-            assert(false && "Unreachable. For now you can invoke this function only synchroniously");
-        }
+        };
+
+        auto shared = connection.lock();
+        // call read operation
+        shared->Read(std::move(OnReadSuccess));
     });
 }
 

@@ -5,7 +5,6 @@
 #include <boost/asio/ssl.hpp>
 
 #include "Command.hpp"
-#include "Connection.hpp"
 #include "Token.hpp"
 
 namespace ssl = boost::asio::ssl;
@@ -14,7 +13,11 @@ using boost::asio::ip::tcp;
 class Config;
 
 namespace service {
-
+/**
+ * TODO:
+ * - [ ] save token:
+ *  Token can last quite a lot so I don't need to request new one each time
+*/
 class Blizzard : public std::enable_shared_from_this<Blizzard> {
 public:
     Blizzard(const Config *config);
@@ -37,9 +40,9 @@ public:
 
 private:
 
-    void QueryRealm(std::function<void(size_t realmId)> continuation = {}) const;
+    void QueryRealm(std::function<void(size_t realmId)> continuation = {});
 
-    void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {}) const;
+    void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {});
 
     void AcquireToken(std::function<void()> continuation = {});
 
