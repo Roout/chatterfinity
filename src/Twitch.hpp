@@ -11,6 +11,7 @@
 #include "Token.hpp"
 #include "Command.hpp"
 #include "Config.hpp"
+#include "Connection.hpp"
 
 namespace service {
 
@@ -54,6 +55,8 @@ private:
 
     void AcquireToken(std::function<void()> continuation = {});
 
+    void Login(std::function<void()> continuation = {});
+
 private:
     class Invoker;
 
@@ -66,6 +69,7 @@ private:
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;
     std::shared_ptr<ssl::context> ssl_;
+    // std::unique_ptr<IrcConnection> irc_;
     
     const Config * const config_ { nullptr };
     std::unique_ptr<Invoker> invoker_;
@@ -78,6 +82,7 @@ public:
     void Execute(command::AccessToken);
     void Execute(command::Help);
     void Execute(command::Shutdown);
+    void Execute(command::Login);
 
 private:
     Twitch * const twitch_ { nullptr };

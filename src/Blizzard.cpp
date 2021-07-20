@@ -70,9 +70,11 @@ void Blizzard::Run() {
 }
 
 void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
-    const char * const kHost = "eu.api.blizzard.com";
     auto request = blizzard::Realm(token_.Get()).Build();
-    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost);
+
+    constexpr char * const kHost = "eu.api.blizzard.com";
+    constexpr char * const kService { "https" };
+    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost, kService);
 
     connection->Write(request, [service = this
         , callback = std::move(continuation)
@@ -89,12 +91,8 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
             , callback = std::move(callback)
             , connection
         ]() mutable {
-            assert(connection.use_count() == 1 && 
-                "Fail invariant:"
-                "Expected: 1 ref - instance which is executing Connection::*"
-                "Assertion Failure may be caused by changing the "
-                "(way)|(place where) this callback is being invoked"
-            );
+            assert(connection.use_count() == 1);
+            
             auto shared = connection.lock();
             const auto [head, body] = shared->AcquireResponse();
             rapidjson::Document json; 
@@ -112,9 +110,11 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
 }
 
 void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuation) {
-    constexpr char * const kHost = "eu.api.blizzard.com";
     auto request = blizzard::RealmStatus(realmId, token_.Get()).Build();
-    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost);
+
+    constexpr char * const kHost = "eu.api.blizzard.com";
+    constexpr char * const kService { "https" };
+    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost, kService);
 
     connection->Write(request, [service = this
         , callback = std::move(continuation)
@@ -168,8 +168,9 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
 
     auto request = blizzard::CredentialsExchange(secret->id_, secret->value_).Build();
 
-    constexpr char * const kHost = "eu.battle.net";
-    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost);
+    constexpr char * const kHost { "eu.battle.net" };
+    constexpr char * const kService { "https" };
+    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost, kService);
 
     connection->Write(request, [service = this
         , callback = std::move(continuation)

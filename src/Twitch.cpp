@@ -59,24 +59,29 @@ void Twitch::Run() {
             }
         });
     }
-    
 }
 
-void Twitch::AcquireToken(std::function<void()> continuation) {
-    constexpr char * const kHost { "id.twitch.tv" };
-    constexpr size_t kId { 0 };
-    const Config::Identity identity { "twitch" };
+void Twitch::Login(std::function<void()> continuation) {
 
+}
+
+
+void Twitch::AcquireToken(std::function<void()> continuation) {
+    const Config::Identity identity { "twitch" };
     const auto secret = config_->GetSecret(identity);
     if (!secret) { 
         throw std::exception("Cannot find a service with identity = twitch");
     }
 
     auto request = twitch::CredentialsExchange(secret->id_, secret->value_).Build();
-    auto connection = std::make_shared<HttpConnection>(context_, ssl_, kId, kHost);
+    
+    constexpr char * const kHost { "id.twitch.tv" };
+    constexpr char * const kSerivce { "https" };
+    constexpr size_t kId { 0 };
+    auto connection = std::make_shared<HttpConnection>(context_, ssl_, kId, kHost, kSerivce);
     // TODO: 
     // Q: Can connection outlive the service? 
-    // A: Shouldn't (service can't be destroyed while the working threads are running. 
+    // A: May not (service can't be destroyed while the working threads are running. 
     //  Joining threads means context is not running so connection is nowhere to be stored => ref_count == 0)
     // Q: 
     // A: 
@@ -95,12 +100,7 @@ void Twitch::AcquireToken(std::function<void()> continuation) {
             , callback = std::move(callback)
             , connection
         ]() mutable {
-            assert(connection.use_count() == 1 && 
-                "Fail invariant:"
-                "Expected: 1 ref - instance which is executing Connection::*"
-                "Assertion Failure may be caused by changing the "
-                "(way)|(place where) this callback is being invoked"
-            );
+            assert(connection.use_count() == 1);
             auto shared = connection.lock();
             const auto [head, body] = shared->AcquireResponse();
             rapidjson::Document json; 
@@ -128,10 +128,8 @@ void Twitch::AcquireToken(std::function<void()> continuation) {
 }
 
 void Twitch::Invoker::Execute(command::AccessToken) {
-    twitch_->AcquireToken([weak = twitch_->weak_from_this()]() {
-        if (auto self = weak.lock(); self) {
-            Console::Write("Token acquired.\n");
-        }
+    twitch_->AcquireToken([]() {
+        Console::Write("Token acquired.\n");
     });
 }
 
@@ -141,6 +139,13 @@ void Twitch::Invoker::Execute(command::Help) {
 
 void Twitch::Invoker::Execute(command::Shutdown) {
 
+}
+
+void Twitch::Invoker::Execute(command::Login cmd) {
+    auto initiateQuery = [twitch = twitch_]() {
+        assert(false && "TODO: ");
+    };
+    std::invoke(initiateQuery);
 }
 
 
