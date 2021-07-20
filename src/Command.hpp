@@ -43,6 +43,16 @@ namespace command {
         }
     };
 
+    struct Login {
+        std::string nick_;
+        std::string pass_;
+
+        static Login Create(const std::vector<std::string_view>& params) {
+            assert(params.size() == 2);
+            return { std::string(params[0]), std::string(params[1]) };
+        }
+    };
+
     namespace details {
     // Type traits:
         template<typename T>

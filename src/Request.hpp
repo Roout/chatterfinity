@@ -12,10 +12,10 @@ public:
 
 namespace twitch {
     static constexpr std::string_view   kHost = "irc.chat.twitch.tv";
-    static constexpr std::uint16_t      kPort = 6697;
+    static constexpr std::string_view   kService = "6697";
     
     /*
-     * 1. Get Access Token
+     * 1. Get APP Access Token
      * in: client_id, client_secret
      * out: access_token, token_type, expires_in
      **/
@@ -36,10 +36,11 @@ namespace twitch {
     };
 
     // App Access token (Credential User Flow)
-    class Authentication : public Query {
+    // application authentication (not user authentication).
+    class AppAuth : public Query {
     public:
 
-        Authentication(const std::string& token)
+        AppAuth(const std::string& token)
             : token_ { token }
         {}
 
@@ -78,6 +79,21 @@ namespace twitch {
 
     private:
         std::string token_;
+    };
+
+    class UserAuth : public Query {
+    public:
+
+        UserAuth(const std::string& nick, const std::string& pass)
+            : nick_ { nick }
+            , pass_ { pass }
+        {}
+
+        std::string Build() const override;
+
+    private:
+        std::string nick_;
+        std::string pass_;
     };
 }
 

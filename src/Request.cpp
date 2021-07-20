@@ -79,7 +79,7 @@ std::string CredentialsExchange::Build() const {
 }
 
 // https://dev.twitch.tv/docs/authentication#sending-user-access-and-app-access-tokens
-std::string Authentication::Build() const {
+std::string AppAuth::Build() const {
     const char *requestTemplate = 
         "GET /helix/ HTTP/1.1\r\n"
         "Host: api.twitch.tv\r\n"
@@ -112,7 +112,12 @@ std::string Validation::Build() const {
     return (boost::format(requestTemplate) % token_).str();
 }
 
-} // namespace twtich
+std::string UserAuth::Build() const {
+    const char * requestTemplate = "PASS %1%\r\nNICK %2%\r\n";
+    return (boost::format(requestTemplate) % pass_ % nick_).str();
+}
+
+} // namespace twitch
 
 namespace blizzard {
 
