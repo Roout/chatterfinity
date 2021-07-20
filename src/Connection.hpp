@@ -25,6 +25,7 @@ public:
         , ssl_context_pointer
         , size_t id
         , std::string_view host
+        , std::string_view service
     );
 
     virtual ~Connection();
@@ -57,9 +58,6 @@ protected:
     void InitiateSocketShutdown();
 
 protected:
-
-    static constexpr std::string_view kService { "https" };
-
     // === Boost IO stuff ===
     io_context_pointer context_ { nullptr };
     ssl_context_pointer sslContext_ { nullptr };
@@ -70,6 +68,8 @@ protected:
     // === Connection details === 
     const size_t id_ { 0 };
     const std::string host_ {};
+    /* string(e.g. https) or numeric(port) */
+    const std::string service_ {};
     std::shared_ptr<Log> log_ { nullptr };
     std::function<void()> onWriteSuccess_;
     std::function<void()> onReadSuccess_;

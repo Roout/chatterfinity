@@ -11,6 +11,7 @@ Connection::Connection(io_context_pointer context
     , ssl_context_pointer sslContext
     , size_t id
     , std::string_view host
+    , std::string_view service
 )
     : context_ { context }
     , sslContext_ { sslContext }
@@ -19,6 +20,7 @@ Connection::Connection(io_context_pointer context
     , socket_ { *context, *sslContext }
     , id_ { id }
     , host_ { host }
+    , service_ { service }
     , log_ { std::make_shared<Log>( (boost::format("%1%connection_%2%.txt") % host % id).str().data() ) }
 {
     // Perform SSL handshake and verify the remote host's certificate.
@@ -45,7 +47,7 @@ void Connection::Write(std::string text, std::function<void()> onSuccess) {
     outbox_ = std::move(text);
     onWriteSuccess_ = std::move(onSuccess);
     resolver_.async_resolve(host_
-        , kService
+        , service_
         , boost::asio::bind_executor(strand_
             , std::bind(&Connection::OnResolve
                 , shared_from_this()
