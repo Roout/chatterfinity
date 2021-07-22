@@ -43,6 +43,12 @@ namespace command {
         }
     };
 
+    struct Validate {
+        static Validate Create(const std::vector<std::string_view>&) {
+            return {};
+        }
+    };
+
     struct Login {
         std::string nick_;
         std::string pass_;
@@ -77,7 +83,8 @@ namespace command {
             static constexpr bool value { 
                 std::is_same_v<T, Shutdown>
                 || std::is_same_v<T, Help>
-                || std::is_same_v<T, AccessToken>
+                || std::is_same_v<T, Validate>
+                || std::is_same_v<T, Login>
             };
         };
 
