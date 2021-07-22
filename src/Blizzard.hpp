@@ -38,6 +38,10 @@ public:
 
     void Run();
 
+    const Config* GetConfig() const noexcept {
+        return config_;
+    }
+
 private:
 
     void QueryRealm(std::function<void(size_t realmId)> continuation = {});
