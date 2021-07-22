@@ -6,6 +6,12 @@
 #include <string>
 #include <cassert>
 
+namespace service {
+    class Blizzard;
+    class Twitch;
+    class Console;
+}
+
 namespace command {
 
     struct RawCommand {
@@ -13,50 +19,58 @@ namespace command {
         std::vector<std::string> params_;
     };
 
+    using Params = std::vector<std::string_view>;
+
     struct RealmID {
-        static RealmID Create(const std::vector<std::string_view>&) {
+        static RealmID Create(const service::Blizzard& ctx, const Params& params) {
             return {};
         }
     };
 
     struct RealmStatus {
-        static RealmStatus Create(const std::vector<std::string_view>&) {
+        static RealmStatus Create(const service::Blizzard& ctx, const Params& params) {
             return {};
         }
     };
 
     struct AccessToken {
-        static AccessToken Create(const std::vector<std::string_view>&) {
+        static AccessToken Create(const service::Blizzard& ctx, const Params& params) {
             return {};
         }
     };
 
     struct Shutdown {
-        static Shutdown Create(const std::vector<std::string_view>&) {
+        static Shutdown Create(const service::Console& ctx, const Params& params) {
             return {};
         }
     };
 
     struct Help {
-        static Help Create(const std::vector<std::string_view>&) {
+        static Help Create(const service::Console& ctx, const Params& params) {
+            return {};
+        }
+        static Help Create(const service::Twitch& ctx, const Params& params) {
+            return {};
+        }
+    };
+    
+    struct Pong {
+        static Pong Create(const service::Twitch& ctx, const Params& params) {
             return {};
         }
     };
 
     struct Validate {
-        static Validate Create(const std::vector<std::string_view>&) {
+        static Validate Create(const service::Twitch& ctx, const Params& params) {
             return {};
         }
     };
 
     struct Login {
-        std::string nick_;
-        std::string pass_;
+        std::string user_;
+        std::string token_;
 
-        static Login Create(const std::vector<std::string_view>& params) {
-            assert(params.size() == 2);
-            return { std::string(params[0]), std::string(params[1]) };
-        }
+        static Login Create(const service::Twitch& ctx, const Params& params);
     };
 
     namespace details {
@@ -81,10 +95,10 @@ namespace command {
         template<typename T>
         struct is_twitch_api {
             static constexpr bool value { 
-                std::is_same_v<T, Shutdown>
-                || std::is_same_v<T, Help>
+                std::is_same_v<T, Help>
                 || std::is_same_v<T, Validate>
                 || std::is_same_v<T, Login>
+                || std::is_same_v<T, Pong>
             };
         };
 

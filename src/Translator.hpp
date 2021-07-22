@@ -30,9 +30,9 @@ public:
     }
 
     template<typename Command, typename Service>
-    static Handle CreateHandle(Service& service) noexcept {
-        return [&service](const Params& params) mutable {
-            Execute(Command::Create(params), service);
+    static Handle CreateHandle(Service& ctx) noexcept {
+        return [&ctx](const Params& params) mutable {
+            Execute(Command::Create(ctx, params), ctx);
         };
     }
 

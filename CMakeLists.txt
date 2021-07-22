@@ -23,6 +23,7 @@ list(APPEND headers
 	"src/Console.hpp"
 	"src/Blizzard.hpp"
 	"src/Twitch.hpp"
+	"src/App.hpp"
 
 	"src/Executor.hpp"
 	"src/ConcurrentQueue.hpp"
@@ -30,6 +31,7 @@ list(APPEND headers
 	
 list(APPEND sources 
 	"src/main.cpp"
+	"src/Command.cpp"
 	"src/Request.cpp"
 	"src/Response.cpp"
 	"src/Config.cpp"
