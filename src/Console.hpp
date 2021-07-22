@@ -7,6 +7,7 @@
 #include "Translator.hpp"
 #include "ConcurrentQueue.hpp"
 
+namespace service {
 // This is source of input 
 class Console {
 public:
@@ -72,3 +73,5 @@ template<typename Command, typename Enable>
 inline void Console::Execute(Command&& cmd) {
     invoker_->Execute(std::forward<Command>(cmd));
 }
+
+} // namespace service

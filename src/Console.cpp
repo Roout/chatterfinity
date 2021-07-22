@@ -1,6 +1,8 @@
 #include "Console.hpp"
 #include "Utility.hpp"
 
+namespace service {
+
 Console::Console(CcQueue<command::RawCommand> * inbox) 
     : inbox_ { inbox }
     , translator_ {}
@@ -94,8 +96,11 @@ void Console::Invoker::Execute(command::Help) {
     Console::Write("available commands:\n"
         "\t!shutdown - exit the application\n"
         "\t!help - show existing commands\n"
-        "\t!token - acquire token fromn blizzard\n"
+        "\t!blizzard-token - acquire token fromn blizzard\n"
         "\t!realm-id - get id of the [flamegor] realm\n"
         "\t!realm-status - get status of the [flamegor] realm\n"
+        "\t!login - login twitch\n"
     );
 }
+
+} // namespace service
