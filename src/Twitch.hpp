@@ -53,8 +53,6 @@ public:
 
 private:
 
-    void AcquireToken(std::function<void()> continuation = {});
-
     void Login(std::function<void()> continuation = {});
 
 private:
@@ -79,9 +77,9 @@ class Twitch::Invoker {
 public:
     Twitch::Invoker(Twitch *twitch) : twitch_ { twitch } {}
 
-    void Execute(command::AccessToken);
     void Execute(command::Help);
     void Execute(command::Shutdown);
+    void Execute(command::Validate);
     void Execute(command::Login);
 
 private:
