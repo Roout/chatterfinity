@@ -57,29 +57,8 @@ namespace {
 
 namespace twitch {
 
-std::string CredentialsExchange::Build() const {
-    const char* bodyTemplate = 
-        "{"
-            " \"client_id\": \"%1%\","
-            " \"client_secret\": \"%2%\","
-            " \"grant_type\": \"client_credentials\","
-            " \"scope\": \"chat:read chat:edit\""
-        "}";
-    const auto body { (boost::format(bodyTemplate) 
-        % id_ 
-        % secret_
-    ).str() };
-    const char *requestTemplate = 
-        "POST /oauth2/token HTTP/1.1\r\n"
-        "Host: id.twitch.tv\r\n"                
-        "Content-Type: application/json\r\n"
-        "Content-Length: %1%\r\n"
-        "\r\n";
-    return (boost::format(requestTemplate) % body.size()).str() + body;
-}
-
 // https://dev.twitch.tv/docs/authentication#sending-user-access-and-app-access-tokens
-std::string AppAuth::Build() const {
+std::string SendToken::Build() const {
     const char *requestTemplate = 
         "GET /helix/ HTTP/1.1\r\n"
         "Host: api.twitch.tv\r\n"
@@ -112,10 +91,16 @@ std::string Validation::Build() const {
     return (boost::format(requestTemplate) % token_).str();
 }
 
-std::string UserAuth::Build() const {
-    const char * requestTemplate = "PASS %1%\r\nNICK %2%\r\n";
-    return (boost::format(requestTemplate) % pass_ % nick_).str();
+std::string Pong::Build() const {
+    return { "PONG :tmi.twitch.tv" };
 }
+
+std::string IrcAuth::Build() const {
+    const char *requestTemplate = 
+        "PASS oauth:%1%\r\n"
+        "NICK: %2%\r\n";
+    return (boost::format(requestTemplate) % token_ % user_).str();
+};
 
 } // namespace twitch
 

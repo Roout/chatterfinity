@@ -2,6 +2,7 @@
 #include "Console.hpp"
 #include "Connection.hpp"
 #include "Request.hpp"
+#include "Command.hpp"
 
 #include "rapidjson/document.h"
 
@@ -11,6 +12,7 @@ Twitch::Twitch(const Config *config)
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
+    , irc_ { std::make_shared<IrcConnection>(context_, ssl_, 0, twitch::kHost, twitch::kService) }
     , invoker_ { std::make_unique<Invoker>(this) }
     , config_ { config }
 {
@@ -42,6 +44,7 @@ Twitch::~Twitch() {
 
 void Twitch::ResetWork() {
     work_.reset();
+    irc_.reset();
 }
 
 void Twitch::Run() {
@@ -61,27 +64,35 @@ void Twitch::Run() {
     }
 }
 
-void Twitch::Login(std::function<void()> continuation) {
-
+void Twitch::Invoker::Execute(command::Help) {
+    assert(false && "TODO: not implemented");
 }
 
-void Twitch::Invoker::Execute(command::Help) {
-
+void Twitch::Invoker::Execute(command::Pong) {
+    auto pongRequest = twitch::Pong{}.Build();
+    assert(false && "TODO: not implemented");
 }
 
 void Twitch::Invoker::Execute(command::Validate) {
-
+    assert(false && "TODO: not implemented");
 }
 
 void Twitch::Invoker::Execute(command::Shutdown) {
-
+    assert(false && "TODO: not implemented");    
 }
 
 void Twitch::Invoker::Execute(command::Login cmd) {
-    auto initiateQuery = [twitch = twitch_]() {
-        assert(false && "TODO: ");
-    };
-    std::invoke(initiateQuery);
+    auto connectRequest = twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
+    assert(twitch_ && twitch_->irc_ && "Cannot be null");
+    twitch_->irc_->Write(connectRequest, [connection = twitch_->irc_.get()]() {
+        // TODO: must always read!
+        connection->Read([connection]() {
+            auto response = connection->AcquireResponse();
+            std::string raw = response.prefix_ + ":" + response.command_ + ":";
+            for(auto& p: response.params_) raw += p + " ";
+            Console::Write("response:", raw);
+        });
+    });
 }
 
 

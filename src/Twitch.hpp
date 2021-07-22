@@ -11,7 +11,8 @@
 #include "Token.hpp"
 #include "Command.hpp"
 #include "Config.hpp"
-#include "Connection.hpp"
+
+class IrcConnection;
 
 namespace service {
 
@@ -51,9 +52,9 @@ public:
 
     void ResetWork();
 
-private:
-
-    void Login(std::function<void()> continuation = {});
+    const Config* GetConfig() const noexcept {
+        return config_;
+    }
 
 private:
     class Invoker;
@@ -67,7 +68,7 @@ private:
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;
     std::shared_ptr<ssl::context> ssl_;
-    // std::unique_ptr<IrcConnection> irc_;
+    std::shared_ptr<IrcConnection> irc_;
     
     const Config * const config_ { nullptr };
     std::unique_ptr<Invoker> invoker_;
@@ -81,6 +82,7 @@ public:
     void Execute(command::Shutdown);
     void Execute(command::Validate);
     void Execute(command::Login);
+    void Execute(command::Pong);
 
 private:
     Twitch * const twitch_ { nullptr };

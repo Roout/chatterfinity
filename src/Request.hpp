@@ -11,36 +11,15 @@ public:
 };
 
 namespace twitch {
-    static constexpr std::string_view   kHost = "irc.chat.twitch.tv";
-    static constexpr std::string_view   kService = "6697";
+    static constexpr std::string_view kHost = "irc.chat.twitch.tv";
+    static constexpr std::string_view kService = "6697";
     
-    /*
-     * 1. Get APP Access Token
-     * in: client_id, client_secret
-     * out: access_token, token_type, expires_in
-     **/
-    class CredentialsExchange : public Query {
-    public:
-        CredentialsExchange(const std::string& id, const std::string& secret) 
-            : id_ { id }
-            , secret_ { secret }
-        {
-        }
-
-        std::string Build() const override;
-
-    private:
-        // client credentials
-        std::string id_;
-        std::string secret_;
-    };
-
-    // App Access token (Credential User Flow)
-    // application authentication (not user authentication).
-    class AppAuth : public Query {
+    // Sending user access and app access tokens
+    // When an API request requires authentication, send the access token as a header
+    class SendToken : public Query {
     public:
 
-        AppAuth(const std::string& token)
+        SendToken(const std::string& token)
             : token_ { token }
         {}
 
@@ -65,7 +44,7 @@ namespace twitch {
         std::string token_;
     };
 
-    // validate App access tokens
+    // validate user access tokens
     // https://dev.twitch.tv/docs/authentication#getting-tokens
     // https://dev.twitch.tv/docs/authentication#validating-requests
     class Validation : public Query {
@@ -81,20 +60,30 @@ namespace twitch {
         std::string token_;
     };
 
-    class UserAuth : public Query {
+    class IrcAuth : public Query {
     public:
 
-        UserAuth(const std::string& nick, const std::string& pass)
-            : nick_ { nick }
-            , pass_ { pass }
+        IrcAuth(const std::string& token, const std::string& user)
+            : token_ { token }
+            , user_ { user }
         {}
 
         std::string Build() const override;
 
     private:
-        std::string nick_;
-        std::string pass_;
+        std::string token_;
+        std::string user_;
     };
+
+    class Pong : public Query {
+    public:
+
+        Pong() = default;
+
+        std::string Build() const override;
+
+    };
+
 }
 
 namespace blizzard {
