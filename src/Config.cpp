@@ -1,6 +1,7 @@
 #include "Config.hpp"
 
 #include <cassert>
+#include <array>
 #include <fstream>
 #include <streambuf>
 
@@ -23,19 +24,29 @@ void Config::Read() {
         std::istreambuf_iterator<char>()
     };
 
-    rapidjson::Document reader; 
-    reader.Parse(buffer.data(), buffer.size());
-    const auto& services = reader["services"];
-    for (auto&& service: services.GetArray()) {
-        assert(service.HasMember("identity") && "Config: Absent service identity");
-        Identity identity { service["identity"].GetString() };
+    auto AddMember = [](auto memberIter, std::string& dst, const char *member) {
+        if (auto it = memberIter->value.FindMember(member); 
+            it != it->value.MemberEnd()
+        ) {
+            dst = it->value.GetString();
+        }
+    };
+
+    rapidjson::Document doc; 
+    doc.Parse(buffer.data(), buffer.size());
+    for (auto serviceIter = doc.MemberBegin(); 
+        serviceIter != doc.MemberEnd(); 
+        ++serviceIter
+    ) {
+        Identity service = serviceIter->name.GetString();
+        Secret secret {};
         
-        assert(service.HasMember("id") && "Config: Absent service id");
-        assert(service.HasMember("secret") && "Config: Absent service secret");
-        Secret secret { service["id"].GetString(), service["secret"].GetString() };
-        
-        assert(services_.find(identity) == services_.end() && "service already exist");
-        services_.emplace(std::move(identity), std::move(secret));
+        AddMember(serviceIter, secret.id_, "client_id");
+        AddMember(serviceIter, secret.user_, "user");
+        AddMember(serviceIter, secret.token_, "token");
+        AddMember(serviceIter, secret.secret_, "secret");
+
+        services_.emplace(std::move(service), std::move(secret));
     }
 }
 

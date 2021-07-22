@@ -7,16 +7,19 @@
 class Config final {
 public:
     using Identity = std::string;
+
     struct Secret {
         std::string id_;
-        std::string value_;
+        std::string user_;
+        std::string token_;
+        std::string secret_;
     };
 
     Config(std::string path);
     
     void Read();
 
-    std::optional<Secret> GetSecret(const Identity& identity) const;
+    std::optional<Config::Secret> GetSecret(const Identity& service) const;
 
 private:
     const std::string path_;
