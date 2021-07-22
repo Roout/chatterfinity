@@ -21,7 +21,7 @@ Connection::Connection(io_context_pointer context
     , id_ { id }
     , host_ { host }
     , service_ { service }
-    , log_ { std::make_shared<Log>( (boost::format("%1%connection_%2%.txt") % host % id).str().data() ) }
+    , log_ { std::make_shared<Log>( (boost::format("%1%_connection_%2%.txt") % host % id).str().data() ) }
 {
     // Perform SSL handshake and verify the remote host's certificate.
     socket_.set_verify_mode(ssl::verify_peer);
@@ -378,5 +378,9 @@ void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes)
         };        
         inbox_.consume(bytes);
         message_ = net::irc::ParseMessage(std::string_view { buffer.data(), buffer.size() } );
+
+        if (onReadSuccess_) {
+            std::invoke(onReadSuccess_);
+        }
     }
 }
