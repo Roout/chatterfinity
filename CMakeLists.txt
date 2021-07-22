@@ -82,7 +82,7 @@ target_compile_options(${This} PRIVATE
 set(Configs
   "DigiCertHighAssuranceEVRootCA.crt.pem"
   "StarfieldServicesRootCA.crt.pem"
-  "secret/secrets.json"
+  "secret/services.json"
 )
 
 foreach(config ${Configs})
