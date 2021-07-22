@@ -26,12 +26,11 @@ void Config::Read() {
 
     auto AddMember = [](auto memberIter, std::string& dst, const char *member) {
         if (auto it = memberIter->value.FindMember(member); 
-            it != it->value.MemberEnd()
+            it != memberIter->value.MemberEnd()
         ) {
             dst = it->value.GetString();
         }
     };
-
     rapidjson::Document doc; 
     doc.Parse(buffer.data(), buffer.size());
     for (auto serviceIter = doc.MemberBegin(); 
@@ -40,7 +39,7 @@ void Config::Read() {
     ) {
         Identity service = serviceIter->name.GetString();
         Secret secret {};
-        
+
         AddMember(serviceIter, secret.id_, "client_id");
         AddMember(serviceIter, secret.user_, "user");
         AddMember(serviceIter, secret.token_, "token");
