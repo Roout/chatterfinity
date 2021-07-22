@@ -166,7 +166,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
         throw std::exception("Cannot find a service with identity = blizzard");
     }
 
-    auto request = blizzard::CredentialsExchange(secret->id_, secret->value_).Build();
+    auto request = blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
 
     constexpr char * const kHost { "eu.battle.net" };
     constexpr char * const kService { "https" };
