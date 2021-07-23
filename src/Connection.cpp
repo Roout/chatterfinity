@@ -381,6 +381,7 @@ void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes)
             boost::asio::buffers_begin(data) + bytes - kCRLF.size()
         };        
         inbox_.consume(bytes);
+        log_->Write(LogType::info, "->", buffer, '\n');
         message_ = net::irc::ParseMessage(std::string_view { buffer.data(), buffer.size() } );
 
         if (onReadSuccess_) {
