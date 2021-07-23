@@ -70,13 +70,12 @@ void Blizzard::Run() {
 }
 
 void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
-    auto request = blizzard::Realm(token_.Get()).Build();
-
     constexpr char * const kHost = "eu.api.blizzard.com";
     constexpr char * const kService { "https" };
     auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost, kService);
-
-    connection->Write(request, [service = this
+    
+    connection->Connect([request = blizzard::Realm(token_.Get()).Build()
+        , service = this
         , callback = std::move(continuation)
         , connection = utils::WeakFrom<HttpConnection>(connection)
     ]() {
@@ -86,37 +85,43 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
             "Assertion Failure may be caused by changing the "
             "(way)|(place where) this callback is being invoked"
         );
-
-        auto OnReadSuccess = [service
+        auto shared = connection.lock();
+        shared->Write(request, [service
             , callback = std::move(callback)
             , connection
-        ]() mutable {
+        ]() {
             assert(connection.use_count() == 1);
-            
-            auto shared = connection.lock();
-            const auto [head, body] = shared->AcquireResponse();
-            rapidjson::Document json; 
-            json.Parse(body.data(), body.size());
-            const auto realmId = json["id"].GetUint64();
-            Console::Write("Realm id: [", realmId, "]\n");
-            if (callback) {
-                boost::asio::post(*service->context_, std::bind(callback, realmId));
-            }
-        };
 
-        auto shared = connection.lock();
-        shared->Read(std::move(OnReadSuccess));
+            auto OnReadSuccess = [service
+                , callback = std::move(callback)
+                , connection
+            ]() mutable {
+                assert(connection.use_count() == 1);
+                
+                auto shared = connection.lock();
+                const auto [head, body] = shared->AcquireResponse();
+                rapidjson::Document json; 
+                json.Parse(body.data(), body.size());
+                const auto realmId = json["id"].GetUint64();
+                Console::Write("Realm id: [", realmId, "]\n");
+                if (callback) {
+                    boost::asio::post(*service->context_, std::bind(callback, realmId));
+                }
+            };
+
+            auto shared = connection.lock();
+            shared->Read(std::move(OnReadSuccess));
+        });
     });
 }
 
 void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuation) {
-    auto request = blizzard::RealmStatus(realmId, token_.Get()).Build();
-
     constexpr char * const kHost = "eu.api.blizzard.com";
     constexpr char * const kService { "https" };
     auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost, kService);
-
-    connection->Write(request, [service = this
+    
+    connection->Connect([request = blizzard::RealmStatus(realmId, token_.Get()).Build()
+        , service = this
         , callback = std::move(continuation)
         , connection = utils::WeakFrom<HttpConnection>(connection)
     ]() {
@@ -127,96 +132,102 @@ void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuati
             "(way)|(place where) this callback is being invoked"
         );
 
-        auto OnReadSuccess = [service
+        auto shared = connection.lock();
+        shared->Write(request, [service
             , callback = std::move(callback)
             , connection
-        ]() mutable {
-            assert(connection.use_count() == 1 && 
-                "Fail invariant:"
-                "Expected: 1 ref - instance which is executing Connection::*"
-                "Assertion Failure may be caused by changing the "
-                "(way)|(place where) this callback is being invoked"
-            );
+        ]() {
+            assert(connection.use_count() == 1);
+
+            auto OnReadSuccess = [service
+                , callback = std::move(callback)
+                , connection
+            ]() mutable {
+                assert(connection.use_count() == 1);
+
+                auto shared = connection.lock();
+                const auto [head, body] = shared->AcquireResponse();
+                rapidjson::Document json; 
+                json.Parse(body.data(), body.size());
+                const auto realms = json["realms"].GetArray();
+                assert(!realms.Empty());    
+                const auto& front = *realms.Begin();
+                const std::string name = front["name"].GetString();
+                const auto hasQueue = json["has_queue"].GetBool();
+                const std::string status = json["status"]["type"].GetString();
+
+                Console::Write(name, "(", status, "):", hasQueue? "\"has queue\"": "\"no queue\"\n");
+                if (callback) {
+                    boost::asio::post(*service->context_, callback);
+                }
+            };
+
             auto shared = connection.lock();
-            const auto [head, body] = shared->AcquireResponse();
-            rapidjson::Document json; 
-            json.Parse(body.data(), body.size());
-            const auto realms = json["realms"].GetArray();
-            assert(!realms.Empty());    
-            const auto& front = *realms.Begin();
-            const std::string name = front["name"].GetString();
-            const auto hasQueue = json["has_queue"].GetBool();
-            const std::string status = json["status"]["type"].GetString();
-
-            Console::Write(name, "(", status, "):", hasQueue? "\"has queue\"": "\"no queue\"\n");
-            if (callback) {
-                boost::asio::post(*service->context_, callback);
-            }
-        };
-
-        auto shared = connection.lock();
-        shared->Read(std::move(OnReadSuccess));
+            shared->Read(std::move(OnReadSuccess));
+        });
     });
 }
 
 void Blizzard::AcquireToken(std::function<void()> continuation) {
-    const Config::Identity identity { "blizzard" };
-    const auto secret = config_->GetSecret(identity);
-    if (!secret) { 
-        throw std::exception("Cannot find a service with identity = blizzard");
-    }
-
-    auto request = blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
-
     constexpr char * const kHost { "eu.battle.net" };
     constexpr char * const kService { "https" };
     auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId(), kHost, kService);
 
-    connection->Write(request, [service = this
+    connection->Connect([service = this
         , callback = std::move(continuation)
         , connection = utils::WeakFrom<HttpConnection>(connection)
     ]() {
-        assert(connection.use_count() == 1 && 
-            "Fail invariant:"
-            "Expected: 1 ref - instance which is executing Connection::OnWrite"
-            "Assertion Failure may be caused by changing the "
-            "(way)|(place where) this callback is being invoked"
-        );
+        assert(connection.use_count() == 1);
+        
+        const Config::Identity identity { "blizzard" };
+        const auto secret = service->GetConfig()->GetSecret(identity);
+        if (!secret) { 
+            throw std::exception("Cannot find a service with identity = blizzard");
+        }
+        auto request = blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
+        auto shared = connection.lock();
 
-        auto OnReadSuccess = [service
+        shared->Write(request, [service
             , callback = std::move(callback)
             , connection
-        ]() mutable {
+        ]() {
             assert(connection.use_count() == 1 && 
                 "Fail invariant:"
-                "Expected: 1 ref - instance which is executing Connection::*"
+                "Expected: 1 ref - instance which is executing Connection::OnWrite"
                 "Assertion Failure may be caused by changing the "
                 "(way)|(place where) this callback is being invoked"
             );
+
+            auto OnReadSuccess = [service
+                , callback = std::move(callback)
+                , connection
+            ]() mutable {
+                assert(connection.use_count() == 1);
+
+                auto shared = connection.lock();
+                const auto [head, body] = shared->AcquireResponse();
+                rapidjson::Document json; 
+                json.Parse(body.data(), body.size());
+                std::string token = json["access_token"].GetString();
+                const auto tokenType = json["token_type"].GetString();
+                const auto expires = json["expires_in"].GetUint64();
+
+                [[maybe_unused]] constexpr auto expectedDuration = 24 * 60 * 60 - 1;
+                assert(expires >= expectedDuration && "Unexpected duration. Blizzard API may be changed!");
+                assert(!strcmp(tokenType, "bearer") && "Unexpected token type. Blizzard API may be changed!");
+
+                Console::Write("Extracted token: [", token, "]\n");
+                service->token_.Emplace(std::move(token), AccessToken::Duration(expires));
+                
+                if (callback) {
+                    boost::asio::post(*service->context_, callback);
+                }
+            };
+
             auto shared = connection.lock();
-            const auto [head, body] = shared->AcquireResponse();
-            rapidjson::Document json; 
-            json.Parse(body.data(), body.size());
-            std::string token = json["access_token"].GetString();
-            const auto tokenType = json["token_type"].GetString();
-            const auto expires = json["expires_in"].GetUint64();
-
-            [[maybe_unused]] constexpr auto expectedDuration = 24 * 60 * 60 - 1;
-            assert(expires >= expectedDuration && "Unexpected duration. Blizzard API may be changed!");
-            assert(!strcmp(tokenType, "bearer") && "Unexpected token type. Blizzard API may be changed!");
-
-            Console::Write("Extracted token: [", token, "]\n");
-            service->token_.Emplace(std::move(token), AccessToken::Duration(expires));
-            
-            if (callback) {
-                boost::asio::post(*service->context_, callback);
-            }
-        };
-
-        auto shared = connection.lock();
-        shared->Read(std::move(OnReadSuccess));
+            shared->Read(std::move(OnReadSuccess));
+        });
     });
-
 }
 
 void Blizzard::Invoker::Execute(command::RealmID) {

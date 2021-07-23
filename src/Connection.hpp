@@ -37,13 +37,13 @@ public:
 
     void Close();
 
-    void Write(std::string text, std::function<void()> onSuccess = {});
+    void Connect(std::function<void()> onConnect = {});
 
-    virtual void Read(std::function<void()> onSuccess = {}) = 0;
+    void Write(std::string text, std::function<void()> onWrite = {});
+
+    virtual void Read(std::function<void()> onRead = {}) = 0;
 
 protected:
-
-    void WriteBuffer();
 
     void OnResolve(const boost::system::error_code& error, tcp::resolver::results_type results);
 
@@ -71,6 +71,7 @@ protected:
     /* string(e.g. https) or numeric(port) */
     const std::string service_ {};
     std::shared_ptr<Log> log_ { nullptr };
+    std::function<void()> onConnectSuccess_;
     std::function<void()> onWriteSuccess_;
     std::function<void()> onReadSuccess_;
 
@@ -82,7 +83,7 @@ class HttpConnection: public Connection {
 public:
 
     using Connection::Connection;
-
+    
     void Read(std::function<void()> onSuccess) override;
 
     net::http::Message AcquireResponse() noexcept {

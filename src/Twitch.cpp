@@ -84,15 +84,20 @@ void Twitch::Invoker::Execute(command::Shutdown) {
 void Twitch::Invoker::Execute(command::Login cmd) {
     auto connectRequest = twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
     assert(twitch_ && twitch_->irc_ && "Cannot be null");
-    twitch_->irc_->Write(connectRequest, [connection = twitch_->irc_.get()]() {
-        // TODO: must always read!
-        connection->Read([connection]() {
-            auto response = connection->AcquireResponse();
-            std::string raw = response.prefix_ + ":" + response.command_ + ":";
-            for(auto& p: response.params_) raw += p + " ";
-            Console::Write("response:", raw);
+    twitch_->irc_->Connect([request = std::move(connectRequest)
+        , irc = twitch_->irc_.get()
+    ]() {
+        irc->Write(request, [irc]() {
+            // TODO: must always read!
+            irc->Read([irc]() {
+                auto response = irc->AcquireResponse();
+                std::string raw = response.prefix_ + ":" + response.command_ + ":";
+                for(auto& p: response.params_) raw += p + " ";
+                Console::Write("response:", raw);
+            });
         });
     });
+    
 }
 
 

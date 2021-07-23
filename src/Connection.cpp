@@ -43,9 +43,8 @@ void Connection::InitiateSocketShutdown() {
     });
 }
 
-void Connection::Write(std::string text, std::function<void()> onSuccess) {
-    outbox_ = std::move(text);
-    onWriteSuccess_ = std::move(onSuccess);
+void Connection::Connect(std::function<void()> onConnect) {
+    onConnectSuccess_ = std::move(onConnect);
     resolver_.async_resolve(host_
         , service_
         , boost::asio::bind_executor(strand_
@@ -53,6 +52,23 @@ void Connection::Write(std::string text, std::function<void()> onSuccess) {
                 , shared_from_this()
                 , std::placeholders::_1
                 , std::placeholders::_2
+            )
+        )
+    );
+}
+
+void Connection::Write(std::string text, std::function<void()> onWrite) {
+    outbox_ = std::move(text);
+    onWriteSuccess_ = std::move(onWrite);
+
+    boost::asio::async_write(
+        socket_,
+        boost::asio::const_buffer(outbox_.data(), outbox_.size()),
+        boost::asio::bind_executor(strand_,
+            std::bind(&Connection::OnWrite, 
+                shared_from_this(), 
+                std::placeholders::_1, 
+                std::placeholders::_2
             )
         )
     );
@@ -100,27 +116,15 @@ void Connection::OnConnect(const boost::system::error_code& error
 
 void Connection::OnHandshake(const boost::system::error_code& error) {
     if (error) {
-        log_->Write(LogType::error, "Handshake failed:", error.message(), "\n");
+        log_->Write(LogType::error, "handshake failed:", error.message(), "\n");
         InitiateSocketShutdown();
     }
     else {
-        assert(!outbox_.empty());
-        WriteBuffer();
+        log_->Write(LogType::info, "handshake successeded.\n");
+        if (onConnectSuccess_) {
+            std::invoke(onConnectSuccess_);
+        }
     }
-}
-
-void Connection::WriteBuffer() {
-    boost::asio::async_write(
-        socket_,
-        boost::asio::const_buffer(outbox_.data(), outbox_.size()),
-        boost::asio::bind_executor(strand_,
-            std::bind(&Connection::OnWrite, 
-                shared_from_this(), 
-                std::placeholders::_1, 
-                std::placeholders::_2
-            )
-        )
-    );
 }
 
 void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
