@@ -93,7 +93,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
                 auto response = irc->AcquireResponse();
                 std::string raw = response.prefix_ + ":" + response.command_ + ":";
                 for(auto& p: response.params_) raw += p + " ";
-                Console::Write("response:", raw);
+                Console::Write("response:", raw, '\n');
             });
         });
     });

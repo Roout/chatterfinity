@@ -92,13 +92,13 @@ std::string Validation::Build() const {
 }
 
 std::string Pong::Build() const {
-    return { "PONG :tmi.twitch.tv" };
+    return "PONG :tmi.twitch.tv\r\n";
 }
 
 std::string IrcAuth::Build() const {
     const char *requestTemplate = 
         "PASS oauth:%1%\r\n"
-        "NICK: %2%\r\n";
+        "NICK %2%\r\n";
     return (boost::format(requestTemplate) % token_ % user_).str();
 };
 
