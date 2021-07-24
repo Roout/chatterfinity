@@ -29,7 +29,7 @@ Twitch::Twitch(const Config *config)
      * ```
      * TODO: read this path from secret + with some chiper
     */
-    const char * const kVerifyFilePath = "StarfieldServicesRootCA.crt.pem";
+    const char * const kVerifyFilePath = "crt/StarfieldServicesRootCA.crt.pem";
     boost::system::error_code error;
     ssl_->load_verify_file(kVerifyFilePath, error);
     if (error) {

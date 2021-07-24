@@ -19,7 +19,7 @@ Blizzard::Blizzard(const Config *config)
 {
     assert(config_ && "Config is NULL");
 
-    const char * const kVerifyFilePath = "DigiCertHighAssuranceEVRootCA.crt.pem";
+    const char * const kVerifyFilePath = "crt/DigiCertHighAssuranceEVRootCA.crt.pem";
     /**
      * [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
      * Cert Chain:
