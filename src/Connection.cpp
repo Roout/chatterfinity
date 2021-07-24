@@ -7,25 +7,17 @@
 
 #include <boost/format.hpp>
 
-Connection::Connection(io_context_pointer context
-    , ssl_context_pointer sslContext
+Connection::Connection(SharedIOContext context
+    , SharedSSLContext sslContext
     , size_t id
-    , std::string_view host
-    , std::string_view service
 )
     : context_ { context }
-    , sslContext_ { sslContext }
+    , ssl_ { sslContext }
     , resolver_ { *context }
     , strand_ { *context }
     , socket_ { *context, *sslContext }
     , id_ { id }
-    , host_ { host }
-    , service_ { service }
-    , log_ { std::make_shared<Log>( (boost::format("%1%_connection_%2%.txt") % host % id).str().data() ) }
 {
-    // Perform SSL handshake and verify the remote host's certificate.
-    socket_.set_verify_mode(ssl::verify_peer);
-    socket_.set_verify_callback(ssl::rfc2818_verification(host.data()));
 }
 
 Connection::~Connection() { 
@@ -43,10 +35,21 @@ void Connection::InitiateSocketShutdown() {
     });
 }
 
-void Connection::Connect(std::function<void()> onConnect) {
+void Connection::Connect(std::string_view host
+        , std::string_view service
+        , std::function<void()> onConnect
+) {
+    // setup verification process settings
+    socket_.set_verify_mode(ssl::verify_peer);
+    socket_.set_verify_callback(ssl::rfc2818_verification(host.data()));
+    // setup logger
+    log_ = std::make_shared<Log>( 
+        (boost::format("%1%_%2%_%3%.txt") % host % service % id_).str().data()
+    );
+    
     onConnectSuccess_ = std::move(onConnect);
-    resolver_.async_resolve(host_
-        , service_
+    resolver_.async_resolve(host
+        , service
         , boost::asio::bind_executor(strand_
             , std::bind(&Connection::OnResolve
                 , shared_from_this()

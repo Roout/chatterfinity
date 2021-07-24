@@ -12,7 +12,7 @@ Twitch::Twitch(const Config *config)
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
-    , irc_ { std::make_shared<IrcConnection>(context_, ssl_, 0, twitch::kHost, twitch::kService) }
+    , irc_ { std::make_shared<IrcConnection>(context_, ssl_, 0) }
     , invoker_ { std::make_unique<Invoker>(this) }
     , config_ { config }
 {
@@ -84,7 +84,8 @@ void Twitch::Invoker::Execute(command::Shutdown) {
 void Twitch::Invoker::Execute(command::Login cmd) {
     auto connectRequest = twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
     assert(twitch_ && twitch_->irc_ && "Cannot be null");
-    twitch_->irc_->Connect([request = std::move(connectRequest)
+    
+    auto onConnect = [request = std::move(connectRequest)
         , irc = twitch_->irc_.get()
     ]() {
         irc->Write(request, [irc]() {
@@ -96,7 +97,8 @@ void Twitch::Invoker::Execute(command::Login cmd) {
                 Console::Write("response:", raw, '\n');
             });
         });
-    });
+    };
+    twitch_->irc_->Connect(twitch::kHost, twitch::kService, std::move(onConnect));
     
 }
 

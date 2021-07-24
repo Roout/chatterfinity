@@ -18,14 +18,12 @@ class Connection :
     public std::enable_shared_from_this<Connection> 
 {
 public:
-    using io_context_pointer = std::shared_ptr<boost::asio::io_context>;
-    using ssl_context_pointer = std::shared_ptr<boost::asio::ssl::context>;
+    using SharedIOContext = std::shared_ptr<boost::asio::io_context>;
+    using SharedSSLContext = std::shared_ptr<boost::asio::ssl::context>;
 
-    Connection(io_context_pointer
-        , ssl_context_pointer
+    Connection(SharedIOContext
+        , SharedSSLContext
         , size_t id
-        , std::string_view host
-        , std::string_view service
     );
 
     virtual ~Connection();
@@ -37,7 +35,9 @@ public:
 
     void Close();
 
-    void Connect(std::function<void()> onConnect = {});
+    void Connect(std::string_view host
+        , std::string_view service
+        , std::function<void()> onConnect = {});
 
     void Write(std::string text, std::function<void()> onWrite = {});
 
@@ -59,17 +59,14 @@ protected:
 
 protected:
     // === Boost IO stuff ===
-    io_context_pointer context_ { nullptr };
-    ssl_context_pointer sslContext_ { nullptr };
+    SharedIOContext context_ { nullptr };
+    SharedSSLContext ssl_ { nullptr };
     tcp::resolver resolver_;
     boost::asio::io_context::strand strand_;
     ssl::stream<tcp::socket> socket_;
     
-    // === Connection details === 
     const size_t id_ { 0 };
-    const std::string host_ {};
-    /* string(e.g. https) or numeric(port) */
-    const std::string service_ {};
+
     std::shared_ptr<Log> log_ { nullptr };
     std::function<void()> onConnectSuccess_;
     std::function<void()> onWriteSuccess_;
