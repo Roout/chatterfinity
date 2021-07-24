@@ -10,6 +10,7 @@
 
 #include "Command.hpp"
 #include "Config.hpp"
+#include "Response.hpp"
 
 class IrcConnection;
 
@@ -47,6 +48,8 @@ public:
     }
 
 private:
+    void HandleResponse(net::irc::Message message);
+
     class Invoker;
 
     using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
@@ -72,6 +75,8 @@ public:
     void Execute(command::Validate);
     void Execute(command::Login);
     void Execute(command::Pong);
+    void Execute(command::Join);
+    void Execute(command::Leave);
 
 private:
     Twitch * const twitch_ { nullptr };

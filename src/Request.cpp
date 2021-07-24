@@ -95,6 +95,19 @@ std::string Pong::Build() const {
     return "PONG :tmi.twitch.tv\r\n";
 }
 
+std::string Leave::Build() const {
+    // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
+    const char *requestTemplate = "PART #%1%\r\n";
+    return (boost::format(requestTemplate) % channel_).str();
+}
+
+
+std::string Join::Build() const {
+    // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
+    const char *requestTemplate = "JOIN #%1%\r\n";
+    return (boost::format(requestTemplate) % channel_).str();
+}
+
 std::string IrcAuth::Build() const {
     const char *requestTemplate = 
         "PASS oauth:%1%\r\n"

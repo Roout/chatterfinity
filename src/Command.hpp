@@ -60,6 +60,19 @@ namespace command {
         }
     };
 
+    struct Join {
+        // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
+        std::string channel_;
+
+        static Join Create(const service::Twitch& ctx, const Params& params);
+    };
+
+    struct Leave {
+        std::string channel_;
+
+        static Leave Create(const service::Twitch& ctx, const Params& params);
+    };
+
     struct Validate {
         static Validate Create(const service::Twitch& ctx, const Params& params) {
             return {};
@@ -98,6 +111,8 @@ namespace command {
                 std::is_same_v<T, Help>
                 || std::is_same_v<T, Validate>
                 || std::is_same_v<T, Login>
+                || std::is_same_v<T, Join>
+                || std::is_same_v<T, Leave>
                 || std::is_same_v<T, Pong>
             };
         };

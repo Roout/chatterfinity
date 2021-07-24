@@ -81,7 +81,30 @@ namespace twitch {
         Pong() = default;
 
         std::string Build() const override;
+    };
 
+    class Join : public Query {
+    public:
+
+        Join(const std::string& channel) 
+            : channel_ { channel } {}
+
+        std::string Build() const override;
+
+    private:
+        std::string channel_;
+    };
+
+    class Leave : public Query {
+    public:
+
+        Leave(const std::string& channel) 
+            : channel_ { channel } {}
+
+        std::string Build() const override;
+
+    private:
+        std::string channel_;
     };
 
 }

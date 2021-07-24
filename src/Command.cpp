@@ -5,6 +5,7 @@
 // #include "Console.hpp"
 
 namespace command {
+
     Login Login::Create(const service::Twitch& ctx, const Params& params) {
         if (params.size() == 2) {
             // user + token
@@ -16,9 +17,26 @@ namespace command {
             return { std::move(secret->user_), std::move(secret->token_) };
         }
         else { // 0 or > 2
-            // TODO: handle wrong command
-            return { "", "" };
+            // TODO: raise exception
+            return {};
         }
         
     }
+
+    Join Join::Create(const service::Twitch& ctx, const Params& params) {
+        if (params.size() == 1) {
+            return { std::string(params.front()) };
+        }
+        // TODO: raise exception
+        return {};
+    }
+
+    Leave Leave::Create(const service::Twitch& ctx, const Params& params) {
+        if (params.size() == 1) {
+            return { std::string(params.front()) };
+        }
+        // TODO: raise exception
+        return {};
+    }
+
 }

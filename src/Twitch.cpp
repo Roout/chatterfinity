@@ -65,6 +65,15 @@ void Twitch::Run() {
     }
 }
 
+void Twitch::HandleResponse(net::irc::Message message) {
+    std::string raw = message.prefix_ + ":" + message.command_ + ":";
+    for(auto& p: message.params_) raw += p + " ";
+    Console::Write(raw, '\n');
+    // if can handle it -> handle it
+    // otherwise send to {App}
+
+}
+
 void Twitch::Invoker::Execute(command::Help) {
     assert(false && "TODO: not implemented");
 }
@@ -87,20 +96,37 @@ void Twitch::Invoker::Execute(command::Shutdown) {
     assert(false && "TODO: not implemented");    
 }
 
+void Twitch::Invoker::Execute(command::Join cmd) {
+    auto join = twitch::Join{cmd.channel_}.Build();
+    assert(true && "TODO: Confirm that connection is alive"
+        "after introducing connection state"
+    );
+    twitch_->irc_->Write(std::move(join), []() {
+        Console::Write("Send join channel request\n");
+    });
+}
+
+void Twitch::Invoker::Execute(command::Leave cmd) {
+    auto join = twitch::Join{cmd.channel_}.Build();
+    assert(true && "TODO: Confirm that connection is alive"
+        "after introducing connection state"
+    );
+    twitch_->irc_->Write(std::move(join), []() {
+        Console::Write("Send part channel request\n");
+    });
+}
+
 void Twitch::Invoker::Execute(command::Login cmd) {
     auto connectRequest = twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
     assert(twitch_ && twitch_->irc_ && "Cannot be null");
     
     auto onConnect = [request = std::move(connectRequest)
+        , twitchService = twitch_
         , irc = twitch_->irc_.get()
     ]() {
-        irc->Write(request, [irc]() {
-            // TODO: must always read!
-            irc->Read([irc]() {
-                auto response = irc->AcquireResponse();
-                std::string raw = response.prefix_ + ":" + response.command_ + ":";
-                for(auto& p: response.params_) raw += p + " ";
-                Console::Write(raw, '\n');
+        irc->Write(std::move(request), [twitchService, irc]() {
+            irc->Read([twitchService, irc]() {
+                twitchService->HandleResponse(irc->AcquireResponse());
             });
         });
     };

@@ -36,7 +36,9 @@ public:
             {"blizzard-token"sv,Translator::CreateHandle<command::AccessToken>(*blizzard_) },
             
             {"validate"sv,      Translator::CreateHandle<command::Validate>(*twitch_) },
-            {"login"sv,         Translator::CreateHandle<command::Login>(*twitch_) }
+            {"login"sv,         Translator::CreateHandle<command::Login>(*twitch_) },
+            {"join"sv,          Translator::CreateHandle<command::Join>(*twitch_) },
+            {"leave"sv,         Translator::CreateHandle<command::Leave>(*twitch_) }
         };
         translator_.Insert(list);
     }
