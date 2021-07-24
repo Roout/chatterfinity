@@ -71,7 +71,12 @@ void Twitch::Invoker::Execute(command::Help) {
 
 void Twitch::Invoker::Execute(command::Pong) {
     auto pongRequest = twitch::Pong{}.Build();
-    assert(false && "TODO: not implemented");
+    assert(true && "TODO: Confirm that connection is alive"
+        "after introducing connection state"
+    );
+    twitch_->irc_->Write(std::move(pongRequest), []() {
+        Console::Write("Send pong request\n");
+    });
 }
 
 void Twitch::Invoker::Execute(command::Validate) {
