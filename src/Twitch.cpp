@@ -44,6 +44,7 @@ Twitch::~Twitch() {
 
 void Twitch::ResetWork() {
     work_.reset();
+    irc_->Close();
     irc_.reset();
 }
 
@@ -94,7 +95,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
                 auto response = irc->AcquireResponse();
                 std::string raw = response.prefix_ + ":" + response.command_ + ":";
                 for(auto& p: response.params_) raw += p + " ";
-                Console::Write("response:", raw, '\n');
+                Console::Write(raw, '\n');
             });
         });
     };

@@ -81,7 +81,7 @@ public:
 
     using Connection::Connection;
     
-    void Read(std::function<void()> onSuccess) override;
+    void Read(std::function<void()> onSuccess = {}) override;
 
     net::http::Message AcquireResponse() noexcept {
         return { std::move(header_), std::move(body_) };
@@ -127,7 +127,7 @@ public:
 
     using Connection::Connection;
 
-    void Read(std::function<void()> onSuccess) override;
+    void Read(std::function<void()> onSuccess = {}) override;
 
     net::irc::Message AcquireResponse() noexcept {
         return std::move(message_);

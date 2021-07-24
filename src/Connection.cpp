@@ -46,7 +46,7 @@ void Connection::Connect(std::string_view host
     log_ = std::make_shared<Log>( 
         (boost::format("%1%_%2%_%3%.txt") % host % service % id_).str().data()
     );
-    
+
     onConnectSuccess_ = std::move(onConnect);
     resolver_.async_resolve(host
         , service
@@ -351,8 +351,10 @@ void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, s
 }
 
 void IrcConnection::Read(std::function<void()> onSuccess) {
-    onReadSuccess_ = std::move(onSuccess);
-    inbox_.consume(inbox_.size());
+    if (onSuccess) {
+        onReadSuccess_ = std::move(onSuccess);
+    }
+    // inbox_.consume(inbox_.size());
 
     boost::asio::async_read_until(socket_
         , inbox_
@@ -390,5 +392,6 @@ void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes)
         if (onReadSuccess_) {
             std::invoke(onReadSuccess_);
         }
+        Read();
     }
 }
