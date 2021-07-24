@@ -20,9 +20,9 @@ public:
     
     ~Console();
 
-    static std::string ReadLn();
+    static std::string ReadLine();
 
-    static void ReadLn(std::string& buffer);
+    static void ReadLine(std::string& buffer);
 
     template<class ...Args>
     static void Write(Args&&...args);

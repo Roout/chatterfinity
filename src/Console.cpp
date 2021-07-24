@@ -23,14 +23,14 @@ Console::~Console() {
     Write("  -> close console service\n");
 }
 
-std::string Console::ReadLn() {
+std::string Console::ReadLine() {
     std::string buffer;
     std::lock_guard<std::mutex> lock { in_ };
     std::getline(std::cin, buffer);
     return buffer;
 }
 
-void Console::ReadLn(std::string& buffer) {
+void Console::ReadLine(std::string& buffer) {
     std::lock_guard<std::mutex> lock { in_ };
     std::getline(std::cin, buffer);
 }
@@ -42,14 +42,25 @@ void Console::Run() {
     static constexpr std::string_view kDelimiter { " " };
     std::string buffer;
     while (running_) {
-        ReadLn(buffer);
+        ReadLine(buffer);
         std::string_view input { buffer };
         input = utils::Trim(input);
         // parse buffer
         std::vector<std::string_view> args;
         auto delimiter = input.find(kDelimiter);
         while (delimiter != std::string_view::npos) {
-            args.emplace_back(input.data(), delimiter);
+            bool isQuoted = false;
+            if (input.front() == '"') {
+                if (auto end = input.find('"', 1); // ignore first character which may be ["]
+                    end != std::string_view::npos)
+                {
+                    // TODO: handle messages without space after ["]: "some long message" no space after; 
+                    delimiter = end;
+                    isQuoted = true;
+                }
+            }
+            const size_t ignored = isQuoted? 1: 0;
+            args.emplace_back(input.data() + ignored, delimiter - ignored);
             // remove prefix with delimiter
             input.remove_prefix(delimiter + 1);
             // remove all special characters from the input
@@ -57,7 +68,9 @@ void Console::Run() {
             // update delimiter position
             delimiter = input.find(kDelimiter);
         }
-        args.emplace_back(input);
+        if (!input.empty()) {
+            args.emplace_back(input);
+        }
         
         assert(!args.empty() && "Args list can't be empty");
 
@@ -66,8 +79,8 @@ void Console::Run() {
         }
 
         if (auto handle = translator_.GetHandle(args.front()); handle) {
-            Write("Call handle:", args.front(), '\n');
-            // try to proccess command here
+            Write("call handle:", args.front(), '\n');
+            // proccess command here
             std::invoke(*handle, Translator::Params{++args.begin(), args.end()});
         }
         else {
@@ -82,7 +95,9 @@ void Console::Run() {
             }
         }
 
-        Write("  -> parsed: [ "sv, args.front(), ", ... ]\n"sv);
+        Write("  -> parsed: ["sv);
+        for(auto&&arg: args) Write(arg, ' ');
+        Write("]\n"sv);
     }
 }
 
@@ -100,6 +115,9 @@ void Console::Invoker::Execute(command::Help) {
         "\t!realm-id - get id of the [flamegor] realm\n"
         "\t!realm-status - get status of the [flamegor] realm\n"
         "\t!login - login twitch\n"
+        "\t!join <channel> - join channel\n"
+        "\t!chat <channel> \"<message>\" - send a message to chat of the specified channel\n"
+        "\t!leave <channel> - leave joined channel\n"
     );
 }
 
