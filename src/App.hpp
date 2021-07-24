@@ -38,6 +38,7 @@ public:
             {"validate"sv,      Translator::CreateHandle<command::Validate>(*twitch_) },
             {"login"sv,         Translator::CreateHandle<command::Login>(*twitch_) },
             {"join"sv,          Translator::CreateHandle<command::Join>(*twitch_) },
+            {"chat"sv,          Translator::CreateHandle<command::Chat>(*twitch_) },
             {"leave"sv,         Translator::CreateHandle<command::Leave>(*twitch_) }
         };
         translator_.Insert(list);

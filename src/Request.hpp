@@ -95,6 +95,21 @@ namespace twitch {
         std::string channel_;
     };
 
+    class Chat : public Query {
+    public:
+
+        Chat(const std::string& channel, const std::string& message) 
+            : channel_ { channel }
+            , message_ { message }
+        {}
+
+        std::string Build() const override;
+
+    private:
+        std::string channel_;
+        std::string message_;
+    };
+
     class Leave : public Query {
     public:
 

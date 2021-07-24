@@ -60,6 +60,13 @@ namespace command {
         }
     };
 
+    struct Chat {
+        std::string channel_;
+        std::string message_;
+
+        static Chat Create(const service::Twitch& ctx, const Params& params);
+    };
+
     struct Join {
         // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
         std::string channel_;
@@ -114,6 +121,7 @@ namespace command {
                 || std::is_same_v<T, Join>
                 || std::is_same_v<T, Leave>
                 || std::is_same_v<T, Pong>
+                || std::is_same_v<T, Chat>
             };
         };
 

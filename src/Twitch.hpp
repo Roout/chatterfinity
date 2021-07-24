@@ -77,6 +77,7 @@ public:
     void Execute(command::Pong);
     void Execute(command::Join);
     void Execute(command::Leave);
+    void Execute(command::Chat);
 
 private:
     Twitch * const twitch_ { nullptr };

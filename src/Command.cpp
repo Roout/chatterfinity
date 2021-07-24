@@ -8,8 +8,9 @@ namespace command {
 
     Login Login::Create(const service::Twitch& ctx, const Params& params) {
         if (params.size() == 2) {
-            // user + token
-            return { std::string(params[0]), std::string(params[1]) };
+            std::string user { params[0] };
+            std::string token { params[1] };
+            return { std::move(user), std::move(token) };
         }
         else if (params.size() <= 1) {
             // get from token
@@ -34,6 +35,17 @@ namespace command {
     Leave Leave::Create(const service::Twitch& ctx, const Params& params) {
         if (params.size() == 1) {
             return { std::string(params.front()) };
+        }
+        // TODO: raise exception
+        return {};
+    }
+
+    Chat Chat::Create(const service::Twitch& ctx, const Params& params) {
+        if (params.size() == 2) {
+            std::string channel { params[0] };
+            std::string message { params[1] };
+            // channel, meesage
+            return { std::move(channel), std::move(message) };
         }
         // TODO: raise exception
         return {};

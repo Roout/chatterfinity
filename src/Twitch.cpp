@@ -84,7 +84,7 @@ void Twitch::Invoker::Execute(command::Pong) {
         "after introducing connection state"
     );
     twitch_->irc_->Write(std::move(pongRequest), []() {
-        Console::Write("Send pong request\n");
+        Console::Write("send pong request\n");
     });
 }
 
@@ -121,7 +121,7 @@ void Twitch::Invoker::Execute(command::Validate) {
                     json.Parse(body.data(), body.size());
                     auto login = json["login"].GetString();
                     auto expiration = json["expires_in"].GetUint64();
-                    Console::Write("[INFO] validation success. Login:", login, "Expire in:", expiration, '\n');
+                    Console::Write("validation success. Login:", login, "Expire in:", expiration, '\n');
                 }
                 else {
                     Console::Write("[ERROR] validation failed. Status:"
@@ -151,7 +151,17 @@ void Twitch::Invoker::Execute(command::Join cmd) {
         "after introducing connection state"
     );
     twitch_->irc_->Write(std::move(join), []() {
-        Console::Write("Send join channel request\n");
+        Console::Write("send join channel request\n");
+    });
+}
+
+void Twitch::Invoker::Execute(command::Chat cmd) {
+    auto chat = twitch::Chat{cmd.channel_, cmd.message_}.Build();
+    assert(true && "TODO: Confirm that connection is alive"
+        "after introducing connection state"
+    );
+    twitch_->irc_->Write(std::move(chat), []() {
+        Console::Write("send message tp channel\n");
     });
 }
 
@@ -161,7 +171,7 @@ void Twitch::Invoker::Execute(command::Leave cmd) {
         "after introducing connection state"
     );
     twitch_->irc_->Write(std::move(join), []() {
-        Console::Write("Send part channel request\n");
+        Console::Write("send part channel request\n");
     });
 }
 
