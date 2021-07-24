@@ -66,7 +66,8 @@ private:
 template<typename ...Args>
 inline void Console::Write(Args&&...args) {
     std::lock_guard<std::mutex> lock { out_ };
-    ((std::cout << std::forward<Args>(args) << " "), ...);
+    std::cout << ">";
+    ((std::cout << " " << std::forward<Args>(args)), ...);
 }
 
 template<typename Command, typename Enable>
