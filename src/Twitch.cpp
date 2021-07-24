@@ -166,11 +166,11 @@ void Twitch::Invoker::Execute(command::Chat cmd) {
 }
 
 void Twitch::Invoker::Execute(command::Leave cmd) {
-    auto join = twitch::Join{cmd.channel_}.Build();
+    auto leave = twitch::Leave{cmd.channel_}.Build();
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(join), []() {
+    twitch_->irc_->Write(std::move(leave), []() {
         Console::Write("send part channel request\n");
     });
 }
