@@ -8,7 +8,6 @@
 #include <vector>
 #include <thread>
 
-#include "Token.hpp"
 #include "Command.hpp"
 #include "Config.hpp"
 
@@ -22,17 +21,8 @@ using boost::asio::ip::tcp;
 
 /**
  * NOTE:
- *  - Uses Client credentials flow
- *  https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#oauth-client-credentials-flow
- *  - 
- * 
- * TODO: 
- * - [ ] validation: can add field "last_validation" to Token and check it before queries
- *  You must validate access tokens before making API requests 
- *  which perform mutations on or access sensitive information of users, 
- *  if it has been more than one hour since the last validation. 
- * - [ ] save token:
- *  Token can last quite a lot so I don't need to request new one each time
+ *  - Uses Implicit code flow	
+ *  https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#oauth-implicit-code-flow
  */
 class Twitch : public std::enable_shared_from_this<Twitch> {
 public:
@@ -64,7 +54,6 @@ private:
     static constexpr size_t kThreads { 2 };
     std::vector<std::thread> threads_;
 
-    AccessToken token_;
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;
     std::shared_ptr<ssl::context> ssl_;
