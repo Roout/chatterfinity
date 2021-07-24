@@ -89,7 +89,56 @@ void Twitch::Invoker::Execute(command::Pong) {
 }
 
 void Twitch::Invoker::Execute(command::Validate) {
-    assert(false && "TODO: not implemented");
+    const size_t kId { 0 };
+    auto connection = std::make_shared<HttpConnection>(twitch_->context_, twitch_->ssl_, kId);
+
+    const Config::Identity kIdentity { "twitch" };
+    const auto secret = twitch_->GetConfig()->GetSecret(kIdentity);
+    if (!secret) {
+        throw std::exception("Fail to create config");
+    }
+    auto onConnect = [request = twitch::Validation{ secret->token_ }.Build()
+        , twitchService = twitch_
+        , connection = utils::WeakFrom<HttpConnection>(connection)
+    ]() {
+        assert(connection.use_count() == 1 && 
+            "Fail invariant:"
+            "Expected: 1 ref - instance which is executing Connection::OnWrite"
+            "Assertion Failure may be caused by changing the "
+            "(way)|(place where) this callback is being invoked"
+        );
+        auto shared = connection.lock();
+        shared->Write(request, [twitchService, connection]() {
+            assert(connection.use_count() == 1);
+
+            auto OnReadSuccess = [twitchService, connection]() {
+                assert(connection.use_count() == 1);
+                
+                auto shared = connection.lock();
+                const auto [head, body] = shared->AcquireResponse();
+                if (head.statusCode_ == 200) {
+                    rapidjson::Document json; 
+                    json.Parse(body.data(), body.size());
+                    auto login = json["login"].GetString();
+                    auto expiration = json["expires_in"].GetUint64();
+                    Console::Write("[INFO] validation success. Login:", login, "Expire in:", expiration, '\n');
+                }
+                else {
+                    Console::Write("[ERROR] validation failed. Status:"
+                        , head.statusCode_
+                        , head.reasonPhrase_
+                        , '\n', body, '\n'
+                    );
+                }
+            };
+
+            auto shared = connection.lock();
+            shared->Read(std::move(OnReadSuccess));
+        });
+    };
+    constexpr std::string_view kHost { "id.twitch.tv" };
+    constexpr std::string_view kService { "https" };
+    connection->Connect(kHost, kService, std::move(onConnect));
 }
 
 void Twitch::Invoker::Execute(command::Shutdown) {
