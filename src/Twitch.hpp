@@ -11,6 +11,7 @@
 #include "Command.hpp"
 #include "Config.hpp"
 #include "Response.hpp"
+#include "Translator.hpp"
 
 class IrcConnection;
 
@@ -61,6 +62,7 @@ private:
     Work work_;
     std::shared_ptr<ssl::context> ssl_;
     std::shared_ptr<IrcConnection> irc_;
+    Translator translator_;
     
     const Config * const config_ { nullptr };
     std::unique_ptr<Invoker> invoker_;

@@ -3,6 +3,7 @@
 #include "Connection.hpp"
 #include "Request.hpp"
 #include "Command.hpp"
+#include "Utility.hpp"
 
 #include "rapidjson/document.h"
 
@@ -13,6 +14,7 @@ Twitch::Twitch(const Config *config)
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
     , irc_ { std::make_shared<IrcConnection>(context_, ssl_, 0) }
+    , translator_ {}
     , invoker_ { std::make_unique<Invoker>(this) }
     , config_ { config }
 {
@@ -35,6 +37,13 @@ Twitch::Twitch(const Config *config)
     if (error) {
         Console::Write("[ERROR]: ", error.message(), '\n');
     }
+
+    using namespace std::literals::string_view_literals;
+    std::initializer_list<Translator::Pair> list {
+        { "help"sv,     Translator::CreateHandle<command::Help>(*this) },
+        { "ping"sv,     Translator::CreateHandle<command::Pong>(*this) }
+    };
+    translator_.Insert(list);
 }
 
 Twitch::~Twitch() {
@@ -66,12 +75,22 @@ void Twitch::Run() {
 }
 
 void Twitch::HandleResponse(net::irc::Message message) {
-    std::string raw = message.prefix_ + ":" + message.command_ + ":";
-    for(auto& p: message.params_) raw += p + " ";
-    Console::Write(raw, '\n');
-    // if can handle it -> handle it
-    // otherwise send to {App}
-
+    if (auto handle = translator_.GetHandle(utils::AsLowerCase(message.command_)); handle) {
+        Console::Write("twitch: handle", message.command_, '\n');
+        // proccess command here
+        Translator::Params params;
+        const size_t paramsCount { message.params_.size() };
+        params.resize(paramsCount);
+        for (size_t i = 0; i < paramsCount; i++) {
+            params[i] = { message.params_[i].data(), message.params_[i].size() };
+        }
+        std::invoke(*handle, params);
+    }
+    else {
+        std::string raw = message.prefix_ + ":" + message.command_ + ":";
+        for(auto& p: message.params_) raw += p + " ";
+        Console::Write("parse:", raw, '\n');
+    }
 }
 
 void Twitch::Invoker::Execute(command::Help) {
