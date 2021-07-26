@@ -9,19 +9,19 @@
 
 Connection::Connection(SharedIOContext context
     , SharedSSLContext sslContext
-    , size_t id
+    , const std::string& log
 )
     : context_ { context }
     , ssl_ { sslContext }
     , resolver_ { *context }
     , strand_ { *context }
     , socket_ { *context, *sslContext }
-    , id_ { id }
+    , log_ { std::make_shared<Log>(log.data()) }
 {
 }
 
 Connection::~Connection() { 
-    // No need to call `close` through executor via `boost::asio::post(...)`
+    // You MUST not call `close` through executor via `boost::asio::post(...)`
     // because last instance of `shared_ptr` is already destroyed
     Close();
     log_->Write(LogType::info, "destroyed\n"); 
@@ -42,11 +42,7 @@ void Connection::Connect(std::string_view host
     // setup verification process settings
     socket_.set_verify_mode(ssl::verify_peer);
     socket_.set_verify_callback(ssl::rfc2818_verification(host.data()));
-    // setup logger
-    log_ = std::make_shared<Log>( 
-        (boost::format("%1%_%2%_%3%.txt") % host % service % id_).str().data()
-    );
-
+   
     onConnectSuccess_ = std::move(onConnect);
     resolver_.async_resolve(host
         , service
@@ -101,7 +97,7 @@ void Connection::OnConnect(const boost::system::error_code& error
     , const boost::asio::ip::tcp::endpoint& endpoint
 ) {
     if (error) {
-        log_->Write(LogType::error, id_ , "failed to connect:", error.message(), "\n");
+        log_->Write(LogType::error, "failed to connect:", error.message(), "\n");
         InitiateSocketShutdown();
     } 
     else {
@@ -354,8 +350,6 @@ void IrcConnection::Read(std::function<void()> onSuccess) {
     if (onSuccess) {
         onReadSuccess_ = std::move(onSuccess);
     }
-    // inbox_.consume(inbox_.size());
-
     boost::asio::async_read_until(socket_
         , inbox_
         , kCRLF
@@ -370,13 +364,14 @@ void IrcConnection::Read(std::function<void()> onSuccess) {
 }
 
 void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes) {
-    if (error) {
+    if (error && error != boost::asio::error::eof) {
         log_->Write(LogType::error, "failed OnRead", error.message(), "\n");
         InitiateSocketShutdown();
     } 
     else {
         if (error == boost::asio::error::eof) {
             log_->Write(LogType::warning, "failed IrcConnection::OnRead meet EOF", error.message(), "\n");
+            return;
         }
         log_->Write(LogType::info, "IrcConnection::OnRead read", bytes, "bytes.\n");
 

@@ -6,6 +6,8 @@
 
 #include <exception>
 
+#include <boost/format.hpp>
+
 #include "rapidjson/document.h"
 
 namespace service {
@@ -70,7 +72,13 @@ void Blizzard::Run() {
 }
 
 void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
-    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId());
+    constexpr char * const kHost { "eu.api.blizzard.com" };
+    constexpr char * const kService { "https" };
+
+    auto connection = std::make_shared<HttpConnection>(context_
+        , ssl_
+        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % GenerateId()).str()
+    );
     auto onConnect = [request = blizzard::Realm(token_.Get()).Build()
         , service = this
         , callback = std::move(continuation)
@@ -110,14 +118,17 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
             shared->Read(std::move(OnReadSuccess));
         });
     };
-
-    constexpr char * const kHost = "eu.api.blizzard.com";
-    constexpr char * const kService { "https" };
     connection->Connect(kHost, kService, std::move(onConnect));
 }
 
 void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuation) {
-    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId());
+    constexpr char * const kHost { "eu.api.blizzard.com" };
+    constexpr char * const kService { "https" };
+    auto connection = std::make_shared<HttpConnection>(context_
+        , ssl_
+        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % GenerateId()).str()
+    );
+    // TODO: remove token => use config!
     auto onConnect = [request = blizzard::RealmStatus(realmId, token_.Get()).Build()
         , service = this
         , callback = std::move(continuation)
@@ -164,14 +175,17 @@ void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuati
             shared->Read(std::move(OnReadSuccess));
         });
     };
-
-    constexpr char * const kHost = "eu.api.blizzard.com";
-    constexpr char * const kService { "https" };
     connection->Connect(kHost, kService, std::move(onConnect));
 }
 
 void Blizzard::AcquireToken(std::function<void()> continuation) {
-    auto connection = std::make_shared<HttpConnection>(context_, ssl_, GenerateId());
+    constexpr char * const kHost { "eu.battle.net" };
+    constexpr char * const kService { "https" };
+
+    auto connection = std::make_shared<HttpConnection>(context_
+        , ssl_
+        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % GenerateId()).str()
+    );
 
     auto onConnect = [service = this
         , callback = std::move(continuation)
@@ -228,9 +242,6 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
             shared->Read(std::move(OnReadSuccess));
         });
     };
-
-    constexpr char * const kHost { "eu.battle.net" };
-    constexpr char * const kService { "https" };
     connection->Connect(kHost, kService, std::move(onConnect));
 }
 

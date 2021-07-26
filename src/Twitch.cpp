@@ -5,6 +5,8 @@
 #include "Command.hpp"
 #include "Utility.hpp"
 
+#include <boost/format.hpp>
+
 #include "rapidjson/document.h"
 
 namespace service {
@@ -13,7 +15,6 @@ Twitch::Twitch(const Config *config)
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
-    , irc_ { std::make_shared<IrcConnection>(context_, ssl_, 0) }
     , translator_ {}
     , invoker_ { std::make_unique<Invoker>(this) }
     , config_ { config }
@@ -53,8 +54,11 @@ Twitch::~Twitch() {
 
 void Twitch::ResetWork() {
     work_.reset();
-    irc_->Close();
-    irc_.reset();
+    if (irc_) {
+        irc_->Close();
+        irc_.reset();
+    }
+    context_->stop();
 }
 
 void Twitch::Run() {
@@ -108,8 +112,14 @@ void Twitch::Invoker::Execute(command::Pong) {
 }
 
 void Twitch::Invoker::Execute(command::Validate) {
+    constexpr std::string_view kHost { "id.twitch.tv" };
+    constexpr std::string_view kService { "https" };
     const size_t kId { 0 };
-    auto connection = std::make_shared<HttpConnection>(twitch_->context_, twitch_->ssl_, kId);
+
+    auto connection = std::make_shared<HttpConnection>(twitch_->context_
+        , twitch_->ssl_
+        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % kId).str()
+    );
 
     const Config::Identity kIdentity { "twitch" };
     const auto secret = twitch_->GetConfig()->GetSecret(kIdentity);
@@ -155,8 +165,6 @@ void Twitch::Invoker::Execute(command::Validate) {
             shared->Read(std::move(OnReadSuccess));
         });
     };
-    constexpr std::string_view kHost { "id.twitch.tv" };
-    constexpr std::string_view kService { "https" };
     connection->Connect(kHost, kService, std::move(onConnect));
 }
 
@@ -196,8 +204,20 @@ void Twitch::Invoker::Execute(command::Leave cmd) {
 
 void Twitch::Invoker::Execute(command::Login cmd) {
     auto connectRequest = twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
-    assert(twitch_ && twitch_->irc_ && "Cannot be null");
+    assert(twitch_ && "Cannot be null");
     
+    // Check to be able reconnect using external approach (not in connection interface)
+    // TODO: implement internal one for the connection
+    if (twitch_->irc_) {
+        twitch_->irc_->Close();
+        twitch_->irc_.reset();
+    }
+
+    twitch_->irc_ = std::make_shared<IrcConnection>(twitch_->context_
+        , twitch_->ssl_
+        ,  (boost::format("%1%_%2%.txt") % twitch::kHost % twitch::kService).str()
+    );
+
     auto onConnect = [request = std::move(connectRequest)
         , twitchService = twitch_
         , irc = twitch_->irc_.get()

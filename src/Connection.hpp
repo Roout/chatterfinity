@@ -21,10 +21,7 @@ public:
     using SharedIOContext = std::shared_ptr<boost::asio::io_context>;
     using SharedSSLContext = std::shared_ptr<boost::asio::ssl::context>;
 
-    Connection(SharedIOContext
-        , SharedSSLContext
-        , size_t id
-    );
+    Connection(SharedIOContext, SharedSSLContext, const std::string& log);
 
     virtual ~Connection();
 
@@ -65,8 +62,6 @@ protected:
     boost::asio::io_context::strand strand_;
     ssl::stream<tcp::socket> socket_;
     
-    const size_t id_ { 0 };
-
     std::shared_ptr<Log> log_ { nullptr };
     std::function<void()> onConnectSuccess_;
     std::function<void()> onWriteSuccess_;
