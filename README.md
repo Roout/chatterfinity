@@ -36,10 +36,22 @@ Valid until: 10/Nov/2031
 ### Twitch
 
 **Source:** [Amazon CA](https://www.amazontrust.com/repository/)
-**Distinguished Name:**
+**Distinguished Name:**  
 
-CN=Starfield Services Root Certificate Authority - G2,
-O=Starfield Technologies\, Inc.,
-L=Scottsdale,
-ST=Arizona,
-C=US
+CN=Starfield Services Root Certificate Authority - G2,  
+O=Starfield Technologies\, Inc.,  
+L=Scottsdale,  
+ST=Arizona,  
+C=US  
+
+## Quick Start
+
+1. Create `secret/services.json` file.  
+The example of the file is provided. **See** [services-example.json](secret/services.json).  
+You can get `client_id` and `secret` in [Twitch Developer Console](https://dev.twitch.tv/) and [blizzard dev console](https://develop.battle.net/). **Note**, ***secret*** is required only for blizzard [Client Credential Flow](https://develop.battle.net/documentation/guides/using-oauth/client-credentials-flow) and ***MUST NOT*** be provided to any other party.  
+You can get `token` for twitch setting up local [server](https://github.com/Roout/twitch-token) and opening it in browser at "http://localhost:3000". **See** more information at the page of [twitch-token generator](https://github.com/Roout/twitch-token).
+2. Build Project with CMake 3.12 or higher.
+
+## Application structure
+
+...
