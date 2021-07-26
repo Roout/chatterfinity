@@ -19,13 +19,31 @@ Connection::Connection(SharedIOContext context
 }
 
 Connection::~Connection() { 
-    // You MUST not call `close` through executor via `boost::asio::post(...)`
-    // because last instance of `shared_ptr` is already destroyed
     Close();
     log_->Write(LogType::info, "destroyed\n"); 
 }
 
-void Connection::InitiateSocketShutdown() {
+void Connection::Close() {
+    boost::system::error_code error;
+    socket_.shutdown(error);
+    if (error) {
+        log_->Write(LogType::error, "SSL stream shutdown:", error.message(), '\n');
+        error.clear();
+    }
+    if (auto&& ll = socket_.lowest_layer(); ll.is_open()) {
+        ll.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
+        if (error) {
+            log_->Write(LogType::error, "SSL underlying socket shutdown:", error.message(), '\n');
+            error.clear();
+        }
+        ll.close(error);
+        if (error) {
+            log_->Write(LogType::error, "SSL underlying socket close:", error.message(), '\n');
+        }
+    } 
+}
+
+void Connection::ScheduleShutdown() {
     boost::asio::post(strand_, [weakSelf = weak_from_this()](){
         if (auto origin = weakSelf.lock(); origin) {
             origin->Close();
@@ -34,8 +52,8 @@ void Connection::InitiateSocketShutdown() {
 }
 
 void Connection::Connect(std::string_view host
-        , std::string_view service
-        , std::function<void()> onConnect
+    , std::string_view service
+    , std::function<void()> onConnect
 ) {
     // setup verification process settings
     socket_.set_verify_mode(ssl::verify_peer);
@@ -95,8 +113,8 @@ void Connection::OnConnect(const boost::system::error_code& error
     , const boost::asio::ip::tcp::endpoint& endpoint
 ) {
     if (error) {
-        log_->Write(LogType::error, "failed to connect:", error.message(), "\n");
-        InitiateSocketShutdown();
+        log_->Write(LogType::error, "OnConnect:", error.message(), "\n");
+        Close();
     } 
     else {
         log_->Write(LogType::info, "connected. Local port:", endpoint, '\n');
@@ -113,8 +131,8 @@ void Connection::OnConnect(const boost::system::error_code& error
 
 void Connection::OnHandshake(const boost::system::error_code& error) {
     if (error) {
-        log_->Write(LogType::error, "handshake failed:", error.message(), "\n");
-        InitiateSocketShutdown();
+        log_->Write(LogType::error, "OnHandshake:", error.message(), "\n");
+        Close();
     }
     else {
         log_->Write(LogType::info, "handshake successeded.\n");
@@ -126,8 +144,8 @@ void Connection::OnHandshake(const boost::system::error_code& error) {
 
 void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
     if (error) {
-        log_->Write(LogType::error, "fail OnWrite:", error.message(), '\n');
-        InitiateSocketShutdown();
+        log_->Write(LogType::error, "OnWrite:", error.message(), '\n');
+        Close();
     }
     else {
         log_->Write(LogType::info, "sent:", bytes, "bytes\n");
@@ -135,24 +153,6 @@ void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
             std::invoke(onWriteSuccess_);
         }
     } 
-}
-
-void Connection::Close() {
-    boost::system::error_code error;
-    socket_.shutdown(error);
-    if (error) {
-        log_->Write(LogType::error, "SSL socket shutdown:", error.message(), '\n');
-        error.clear();
-    }
-    socket_.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
-    if (error) {
-        log_->Write(LogType::error, "SSL underlying socket shutdown:", error.message(), '\n');
-        error.clear();
-    }
-    socket_.lowest_layer().close(error);
-    if (error) {
-        log_->Write(LogType::error, "SSL underlying socket close:", error.message(), '\n');
-    }
 }
 
 void HttpConnection::Read(std::function<void()> onSuccess) {
@@ -180,12 +180,12 @@ void HttpConnection::ReadHeader() {
 
 void HttpConnection::OnHeaderRead(const boost::system::error_code& error, size_t bytes) {
     if (error) {
-        log_->Write(LogType::error, "failed OnHeaderRead", error.message(), "\n");
-        InitiateSocketShutdown();
+        log_->Write(LogType::error, "OnHeaderRead", error.message(), "\n");
+        Close();
     } 
     else {
         if (error == boost::asio::error::eof) {
-            log_->Write(LogType::warning, "failed OnHeaderRead meet EOF", error.message(), "\n");
+            log_->Write(LogType::warning, "OnHeaderRead:", error.message(), "\n");
         }
         log_->Write(LogType::info, "OnHeaderRead read", bytes, "bytes.\n");
 
@@ -255,7 +255,7 @@ void HttpConnection::ReadIntactBody() {
     }
     else {
         // NOTIFY that we have read body sucessfully
-        log_->Write(LogType::info, "read intact body:", body_, '\n');
+        log_->Write(LogType::info, "ReadIntactBody:", body_, '\n');
         if (onReadSuccess_) {
             std::invoke(onReadSuccess_);
         }
@@ -264,14 +264,14 @@ void HttpConnection::ReadIntactBody() {
 
 void HttpConnection::OnReadIntactBody(const boost::system::error_code& error, size_t bytes) {
     if (error && error != boost::asio::error::eof) {
-        log_->Write(LogType::error, "failed OnReadIntactBody", error.message(), "\n");
+        log_->Write(LogType::error, "OnReadIntactBody:", error.message(), "\n");
         // required for the case when a connection still has outgoing write or other operation
         // so shared_ptr's strong_refs > 0
-        InitiateSocketShutdown();
+        Close();
         return;
     } 
     if (error == boost::asio::error::eof) {
-        log_->Write(LogType::warning, "failed OnReadIntactBody meet EOF", error.message(), "\n");
+        log_->Write(LogType::warning, "OnReadIntactBody:", error.message(), "\n");
     }
     log_->Write(LogType::info, "OnReadIntactBody read", bytes, "bytes.\n");
  
@@ -304,12 +304,12 @@ void HttpConnection::ReadChunkedBody() {
 
 void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, size_t bytes) {
     if (error && error != boost::asio::error::eof) {
-        log_->Write(LogType::error, "failed OnReadChunkedBody", error.message(), "\n");
-        InitiateSocketShutdown();
+        log_->Write(LogType::error, "OnReadChunkedBody:", error.message(), "\n");
+        Close();
         return;
     } 
     if (error == boost::asio::error::eof) {
-        log_->Write(LogType::warning, "failed OnReadChunkedBody meet EOF", error.message(), "\n");
+        log_->Write(LogType::warning, "OnReadChunkedBody:", error.message(), "\n");
     }
 
     log_->Write(LogType::info, "OnReadChunkedBody read", bytes, "bytes.\n");
@@ -363,15 +363,15 @@ void IrcConnection::Read(std::function<void()> onSuccess) {
 
 void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes) {
     if (error && error != boost::asio::error::eof) {
-        log_->Write(LogType::error, "failed OnRead", error.message(), "\n");
-        InitiateSocketShutdown();
+        log_->Write(LogType::error, "OnRead:", error.message(), "\n");
+        Close();
     } 
     else {
         if (error == boost::asio::error::eof) {
-            log_->Write(LogType::warning, "failed IrcConnection::OnRead meet EOF", error.message(), "\n");
+            log_->Write(LogType::warning, "OnRead", error.message(), "\n");
             return;
         }
-        log_->Write(LogType::info, "IrcConnection::OnRead read", bytes, "bytes.\n");
+        log_->Write(LogType::info, "OnRead read", bytes, "bytes.\n");
 
         const auto data { inbox_.data() };
         std::string buffer {

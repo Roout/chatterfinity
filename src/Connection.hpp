@@ -32,6 +32,8 @@ public:
 
     void Close();
 
+    void ScheduleShutdown();
+
     void Connect(std::string_view host
         , std::string_view service
         , std::function<void()> onConnect = {});
@@ -49,10 +51,6 @@ protected:
     void OnHandshake(const boost::system::error_code& error);
 
     void OnWrite(const boost::system::error_code& error, size_t bytes);
-
-    // TODO: temporary stuff; used while the exception system/error handling is not implemented
-    // Just `post` `Connection::Close` through `strand`
-    void InitiateSocketShutdown();
 
 protected:
     // === Boost IO stuff ===
