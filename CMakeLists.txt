@@ -26,6 +26,7 @@ list(APPEND headers
 	"src/App.hpp"
 
 	"src/ConcurrentQueue.hpp"
+	"src/SwitchBuffer.hpp"
 )
 	
 list(APPEND sources 
