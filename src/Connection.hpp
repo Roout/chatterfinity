@@ -21,7 +21,12 @@ public:
     using SharedIOContext = std::shared_ptr<boost::asio::io_context>;
     using SharedSSLContext = std::shared_ptr<boost::asio::ssl::context>;
 
-    Connection(SharedIOContext, SharedSSLContext, const std::string& log);
+    Connection(SharedIOContext
+        , SharedSSLContext
+        , std::string_view host
+        , std::string_view service
+        , size_t id
+    );
 
     virtual ~Connection();
 
@@ -34,9 +39,7 @@ public:
 
     void ScheduleShutdown();
 
-    void Connect(std::string_view host
-        , std::string_view service
-        , std::function<void()> onConnect = {});
+    void Connect(std::function<void()> onConnect = {});
 
     void Write(std::string text, std::function<void()> onWrite = {});
 
@@ -59,7 +62,9 @@ protected:
     tcp::resolver resolver_;
     boost::asio::io_context::strand strand_;
     ssl::stream<tcp::socket> socket_;
-    
+
+    const std::string host_;
+    const std::string service_;    
     std::shared_ptr<Log> log_ { nullptr };
     std::function<void()> onConnectSuccess_;
     std::function<void()> onWriteSuccess_;

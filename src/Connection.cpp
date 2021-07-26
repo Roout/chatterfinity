@@ -5,17 +5,26 @@
 #include <functional>
 #include <algorithm>
 
+#include <boost/format.hpp>
+
 Connection::Connection(SharedIOContext context
     , SharedSSLContext sslContext
-    , const std::string& log
+    , std::string_view host
+    , std::string_view service
+    , size_t id
 )
     : context_ { context }
     , ssl_ { sslContext }
     , resolver_ { *context }
     , strand_ { *context }
     , socket_ { *context, *sslContext }
-    , log_ { std::make_shared<Log>(log.data()) }
+    , host_ { host }
+    , service_ { service }
+    , log_ { std::make_shared<Log>((boost::format("%1%_%2%_%3%.txt") % host % service % id).str().data()) }
 {
+    // setup verification process settings
+    socket_.set_verify_mode(ssl::verify_peer);
+    socket_.set_verify_callback(ssl::rfc2818_verification(host.data()));
 }
 
 Connection::~Connection() { 
@@ -51,17 +60,10 @@ void Connection::ScheduleShutdown() {
     });
 }
 
-void Connection::Connect(std::string_view host
-    , std::string_view service
-    , std::function<void()> onConnect
-) {
-    // setup verification process settings
-    socket_.set_verify_mode(ssl::verify_peer);
-    socket_.set_verify_callback(ssl::rfc2818_verification(host.data()));
-   
+void Connection::Connect(std::function<void()> onConnect) { 
     onConnectSuccess_ = std::move(onConnect);
-    resolver_.async_resolve(host
-        , service
+    resolver_.async_resolve(host_
+        , service_
         , boost::asio::bind_executor(strand_
             , std::bind(&Connection::OnResolve
                 , shared_from_this()

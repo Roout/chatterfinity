@@ -5,8 +5,6 @@
 #include "Command.hpp"
 #include "Utility.hpp"
 
-#include <boost/format.hpp>
-
 #include "rapidjson/document.h"
 
 namespace service {
@@ -116,9 +114,8 @@ void Twitch::Invoker::Execute(command::Validate) {
     constexpr std::string_view kService { "https" };
     const size_t kId { 0 };
 
-    auto connection = std::make_shared<HttpConnection>(twitch_->context_
-        , twitch_->ssl_
-        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % kId).str()
+    auto connection = std::make_shared<HttpConnection>(
+        twitch_->context_, twitch_->ssl_, kHost, kService, kId
     );
 
     const Config::Identity kIdentity { "twitch" };
@@ -165,7 +162,7 @@ void Twitch::Invoker::Execute(command::Validate) {
             shared->Read(std::move(OnReadSuccess));
         });
     };
-    connection->Connect(kHost, kService, std::move(onConnect));
+    connection->Connect(std::move(onConnect));
 }
 
 void Twitch::Invoker::Execute(command::Shutdown) {
@@ -213,9 +210,12 @@ void Twitch::Invoker::Execute(command::Login cmd) {
         twitch_->irc_.reset();
     }
 
+    const size_t id { 0 };
     twitch_->irc_ = std::make_shared<IrcConnection>(twitch_->context_
         , twitch_->ssl_
-        ,  (boost::format("%1%_%2%.txt") % twitch::kHost % twitch::kService).str()
+        , twitch::kHost
+        , twitch::kService
+        , id
     );
 
     auto onConnect = [request = std::move(connectRequest)
@@ -228,7 +228,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
             });
         });
     };
-    twitch_->irc_->Connect(twitch::kHost, twitch::kService, std::move(onConnect));
+    twitch_->irc_->Connect(std::move(onConnect));
     
 }
 
