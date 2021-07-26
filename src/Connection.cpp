@@ -5,8 +5,6 @@
 #include <functional>
 #include <algorithm>
 
-#include <boost/format.hpp>
-
 Connection::Connection(SharedIOContext context
     , SharedSSLContext sslContext
     , const std::string& log
