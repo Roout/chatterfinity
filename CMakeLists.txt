@@ -25,7 +25,6 @@ list(APPEND headers
 	"src/Twitch.hpp"
 	"src/App.hpp"
 
-	"src/Executor.hpp"
 	"src/ConcurrentQueue.hpp"
 )
 	
