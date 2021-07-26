@@ -93,7 +93,7 @@ void Connection::OnResolve(const boost::system::error_code& error
     , tcp::resolver::results_type results
 ) {
     if (error) {
-        log_->Write(LogType::error, "failed to resolve the host\n");
+        log_->Write(LogType::error, "OnResolve:", error.message(), '\n');
     }
     else {
         boost::asio::async_connect(socket_.lowest_layer()
@@ -184,12 +184,8 @@ void HttpConnection::OnHeaderRead(const boost::system::error_code& error, size_t
         Close();
     } 
     else {
-        if (error == boost::asio::error::eof) {
-            log_->Write(LogType::warning, "OnHeaderRead:", error.message(), "\n");
-        }
         log_->Write(LogType::info, "OnHeaderRead read", bytes, "bytes.\n");
-
-        {
+        { // extract header
             const auto data { inbox_.data() };
             const std::string header {
                 boost::asio::buffers_begin(data), 
@@ -263,27 +259,23 @@ void HttpConnection::ReadIntactBody() {
 }
 
 void HttpConnection::OnReadIntactBody(const boost::system::error_code& error, size_t bytes) {
-    if (error && error != boost::asio::error::eof) {
+    if (error) {
         log_->Write(LogType::error, "OnReadIntactBody:", error.message(), "\n");
-        // required for the case when a connection still has outgoing write or other operation
-        // so shared_ptr's strong_refs > 0
         Close();
-        return;
-    } 
-    if (error == boost::asio::error::eof) {
-        log_->Write(LogType::warning, "OnReadIntactBody:", error.message(), "\n");
     }
-    log_->Write(LogType::info, "OnReadIntactBody read", bytes, "bytes.\n");
- 
-    auto data = inbox_.data();
-    std::string chunk {
-        boost::asio::buffers_begin(data), 
-        boost::asio::buffers_begin(data) + bytes
-    };
-    inbox_.consume(bytes);
-    body_.append(chunk);
-    // continue to read
-    ReadIntactBody();
+    else {
+        log_->Write(LogType::info, "OnReadIntactBody read", bytes, "bytes.\n");
+    
+        auto data = inbox_.data();
+        std::string chunk {
+            boost::asio::buffers_begin(data), 
+            boost::asio::buffers_begin(data) + bytes
+        };
+        inbox_.consume(bytes);
+        body_.append(chunk);
+        // continue to read
+        ReadIntactBody();
+    }
 }
 
 void HttpConnection::ReadChunkedBody() {
@@ -303,14 +295,11 @@ void HttpConnection::ReadChunkedBody() {
 }
 
 void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, size_t bytes) {
-    if (error && error != boost::asio::error::eof) {
+    if (error) {
         log_->Write(LogType::error, "OnReadChunkedBody:", error.message(), "\n");
         Close();
         return;
     } 
-    if (error == boost::asio::error::eof) {
-        log_->Write(LogType::warning, "OnReadChunkedBody:", error.message(), "\n");
-    }
 
     log_->Write(LogType::info, "OnReadChunkedBody read", bytes, "bytes.\n");
     const auto data = inbox_.data();
@@ -362,15 +351,11 @@ void IrcConnection::Read(std::function<void()> onSuccess) {
 }
 
 void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes) {
-    if (error && error != boost::asio::error::eof) {
+    if (error) {
         log_->Write(LogType::error, "OnRead:", error.message(), "\n");
         Close();
     } 
     else {
-        if (error == boost::asio::error::eof) {
-            log_->Write(LogType::warning, "OnRead", error.message(), "\n");
-            return;
-        }
         log_->Write(LogType::info, "OnRead read", bytes, "bytes.\n");
 
         const auto data { inbox_.data() };
