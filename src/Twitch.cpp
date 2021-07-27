@@ -101,19 +101,26 @@ void Twitch::Invoker::Execute(command::Help) {
 }
 
 void Twitch::Invoker::Execute(command::Pong) {
-    auto pongRequest = twitch::Pong{}.Build();
-    assert(true && "TODO: Confirm that connection is alive"
-        "after introducing connection state"
-    );
-    twitch_->irc_->ScheduleWrite(std::move(pongRequest), []() {
-        Console::Write("send pong request\n");
-    });
+    assert(twitch_ && "Cannot be null");
+    // TODO: still need to handle the case 
+    // when `irc_` is alive but failed [re-]connect!
+    if (!twitch_->irc_) {
+        Console::Write("pong: irc connection is not established\n");
+    }
+    else {
+        auto pongRequest = twitch::Pong{}.Build();
+        twitch_->irc_->ScheduleWrite(std::move(pongRequest), []() {
+            Console::Write("send pong request\n");
+        });
+    }
 }
 
 void Twitch::Invoker::Execute(command::Validate) {
     constexpr std::string_view kHost { "id.twitch.tv" };
     constexpr std::string_view kService { "https" };
     const size_t kId { 0 };
+
+    assert(twitch_ && "Cannot be null");
 
     auto connection = std::make_shared<HttpConnection>(
         twitch_->context_, twitch_->ssl_, kHost, kService, kId
@@ -171,33 +178,48 @@ void Twitch::Invoker::Execute(command::Shutdown) {
 }
 
 void Twitch::Invoker::Execute(command::Join cmd) {
-    auto join = twitch::Join{cmd.channel_}.Build();
-    assert(true && "TODO: Confirm that connection is alive"
-        "after introducing connection state"
-    );
-    twitch_->irc_->ScheduleWrite(std::move(join), []() {
-        Console::Write("send join channel request\n");
-    });
+    assert(twitch_ && "Cannot be null");
+    // TODO: still need to handle the case 
+    // when `irc_` is alive but failed [re-]connect!
+    if (!twitch_->irc_) {
+        Console::Write("join: irc connection is not established\n");
+    }
+    else {
+        auto join = twitch::Join{cmd.channel_}.Build();
+        twitch_->irc_->ScheduleWrite(std::move(join), []() {
+            Console::Write("send join channel request\n");
+        });
+    }
 }
 
 void Twitch::Invoker::Execute(command::Chat cmd) {
-    auto chat = twitch::Chat{cmd.channel_, cmd.message_}.Build();
-    assert(true && "TODO: Confirm that connection is alive"
-        "after introducing connection state"
-    );
-    twitch_->irc_->ScheduleWrite(std::move(chat), []() {
-        Console::Write("send message tp channel\n");
-    });
+    assert(twitch_ && "Cannot be null");
+    // TODO: still need to handle the case 
+    // when `irc_` is alive but failed [re-]connect!
+    if (!twitch_->irc_) {
+        Console::Write("chat: irc connection is not established\n");
+    }
+    else {
+        auto chat = twitch::Chat{cmd.channel_, cmd.message_}.Build();
+        twitch_->irc_->ScheduleWrite(std::move(chat), []() {
+            Console::Write("send message tp channel\n");
+        });
+    }
 }
 
 void Twitch::Invoker::Execute(command::Leave cmd) {
-    auto leave = twitch::Leave{cmd.channel_}.Build();
-    assert(true && "TODO: Confirm that connection is alive"
-        "after introducing connection state"
-    );
-    twitch_->irc_->ScheduleWrite(std::move(leave), []() {
-        Console::Write("send part channel request\n");
-    });
+    assert(twitch_ && "Cannot be null");
+    // TODO: still need to handle the case 
+    // when `irc_` is alive but failed [re-]connect!
+    if (!twitch_->irc_) {
+        Console::Write("leave: irc connection is not established\n");
+    }
+    else {
+        auto leave = twitch::Leave{cmd.channel_}.Build();
+        twitch_->irc_->ScheduleWrite(std::move(leave), []() {
+            Console::Write("send part channel request\n");
+        });
+    }
 }
 
 void Twitch::Invoker::Execute(command::Login cmd) {
