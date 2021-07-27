@@ -7,8 +7,6 @@
 
 #include <boost/format.hpp>
 
-#include <iostream>
-
 Connection::Connection(SharedIOContext context
     , SharedSSLContext sslContext
     , std::string_view host
