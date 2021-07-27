@@ -201,14 +201,11 @@ void Twitch::Invoker::Execute(command::Leave cmd) {
 }
 
 void Twitch::Invoker::Execute(command::Login cmd) {
-    auto connectRequest = twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
     assert(twitch_ && "Cannot be null");
-    
-    // Check to be able reconnect using external approach (not in connection interface)
-    // TODO: implement internal one for the connection
+    // TODO: still need to handle the case when all attempt to reconnect failed!
     if (twitch_->irc_) {
-        // twitch_->irc_->ScheduleShutdown();
-        twitch_->irc_.reset();
+        Console::Write("irc connection is already established\n");
+        return;
     }
 
     const size_t id { 0 };
@@ -219,7 +216,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
         , id
     );
 
-    auto onConnect = [request = std::move(connectRequest)
+    auto onConnect = [request =twitch::IrcAuth{cmd.token_, cmd.user_}.Build()
         , twitchService = twitch_
         , irc = twitch_->irc_.get()
     ]() {
@@ -230,7 +227,6 @@ void Twitch::Invoker::Execute(command::Login cmd) {
         });
     };
     twitch_->irc_->Connect(std::move(onConnect));
-    
 }
 
 
