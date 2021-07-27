@@ -10,6 +10,7 @@
 
 #include "Logger.hpp"
 #include "Response.hpp"
+#include "SwitchBuffer.hpp"
 
 using boost::asio::ip::tcp;
 namespace ssl = boost::asio::ssl;
@@ -41,11 +42,13 @@ public:
 
     void Connect(std::function<void()> onConnect = {});
 
-    void Write(std::string text, std::function<void()> onWrite = {});
+    void ScheduleWrite(std::string text, std::function<void()> onWrite = {});
 
     virtual void Read(std::function<void()> onRead = {}) = 0;
 
 protected:
+
+    void Write();
 
     void OnResolve(const boost::system::error_code& error, tcp::resolver::results_type results);
 
@@ -71,7 +74,8 @@ protected:
     std::function<void()> onReadSuccess_;
 
     // === Write ===
-    std::string outbox_;
+    SwitchBuffer outbox_;
+    bool isWriting_ { false };
 };
 
 class HttpConnection: public Connection {

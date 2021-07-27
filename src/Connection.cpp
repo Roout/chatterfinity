@@ -21,6 +21,7 @@ Connection::Connection(SharedIOContext context
     , host_ { host }
     , service_ { service }
     , log_ { std::make_shared<Log>((boost::format("%1%_%2%_%3%.txt") % host % service % id).str().data()) }
+    , isWriting_ { false }
 {
     // setup verification process settings
     socket_.set_verify_mode(ssl::verify_peer);
@@ -69,23 +70,6 @@ void Connection::Connect(std::function<void()> onConnect) {
                 , shared_from_this()
                 , std::placeholders::_1
                 , std::placeholders::_2
-            )
-        )
-    );
-}
-
-void Connection::Write(std::string text, std::function<void()> onWrite) {
-    outbox_ = std::move(text);
-    onWriteSuccess_ = std::move(onWrite);
-
-    boost::asio::async_write(
-        socket_,
-        boost::asio::const_buffer(outbox_.data(), outbox_.size()),
-        boost::asio::bind_executor(strand_,
-            std::bind(&Connection::OnWrite, 
-                shared_from_this(), 
-                std::placeholders::_1, 
-                std::placeholders::_2
             )
         )
     );
@@ -144,13 +128,51 @@ void Connection::OnHandshake(const boost::system::error_code& error) {
     }
 }
 
+void Connection::ScheduleWrite(std::string text, std::function<void()> onWrite) {
+    auto deferredCallee = [text = std::move(text)
+        , callback = std::move(onWrite)
+        , self = shared_from_this()
+    ]() mutable {
+        self->outbox_.Enque(std::move(text));
+        self->onWriteSuccess_ = std::move(callback);
+        if (!self->isWriting_) {
+            self->Write();
+        }
+    };
+    boost::asio::post(strand_, std::move(deferredCallee));
+}
+
+void Connection::Write() {
+    // add all text that is queued for write operation to active buffer
+    outbox_.SwapBuffers();
+    isWriting_ = true;
+    boost::asio::async_write(
+        socket_,
+        outbox_.GetBufferSequence(),
+        boost::asio::bind_executor(strand_,
+            std::bind(&Connection::OnWrite, 
+                shared_from_this(), 
+                std::placeholders::_1, 
+                std::placeholders::_2
+            )
+        )
+    );
+}
+
 void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
+    isWriting_ = false;
+
     if (error) {
         log_->Write(LogType::error, "OnWrite:", error.message(), '\n');
         Close();
     }
     else {
         log_->Write(LogType::info, "sent:", bytes, "bytes\n");
+        if (outbox_.GetQueueSize()) {
+            // there are a few messages scheduled to be sent
+            log_->Write(LogType::info, "queued messages:", outbox_.GetQueueSize(), "\n");
+            Write();
+        }
         if (onWriteSuccess_) {
             std::invoke(onWriteSuccess_);
         }

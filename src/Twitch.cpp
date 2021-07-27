@@ -104,7 +104,7 @@ void Twitch::Invoker::Execute(command::Pong) {
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(pongRequest), []() {
+    twitch_->irc_->ScheduleWrite(std::move(pongRequest), []() {
         Console::Write("send pong request\n");
     });
 }
@@ -134,7 +134,7 @@ void Twitch::Invoker::Execute(command::Validate) {
             "(way)|(place where) this callback is being invoked"
         );
         auto shared = connection.lock();
-        shared->Write(request, [twitchService, connection]() {
+        shared->ScheduleWrite(std::move(request), [twitchService, connection]() {
             assert(connection.use_count() == 1);
 
             auto OnReadSuccess = [twitchService, connection]() {
@@ -174,7 +174,7 @@ void Twitch::Invoker::Execute(command::Join cmd) {
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(join), []() {
+    twitch_->irc_->ScheduleWrite(std::move(join), []() {
         Console::Write("send join channel request\n");
     });
 }
@@ -184,7 +184,7 @@ void Twitch::Invoker::Execute(command::Chat cmd) {
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(chat), []() {
+    twitch_->irc_->ScheduleWrite(std::move(chat), []() {
         Console::Write("send message tp channel\n");
     });
 }
@@ -194,7 +194,7 @@ void Twitch::Invoker::Execute(command::Leave cmd) {
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(leave), []() {
+    twitch_->irc_->ScheduleWrite(std::move(leave), []() {
         Console::Write("send part channel request\n");
     });
 }
@@ -222,7 +222,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
         , twitchService = twitch_
         , irc = twitch_->irc_.get()
     ]() {
-        irc->Write(std::move(request), [twitchService, irc]() {
+        irc->ScheduleWrite(std::move(request), [twitchService, irc]() {
             irc->Read([twitchService, irc]() {
                 twitchService->HandleResponse(irc->AcquireResponse());
             });

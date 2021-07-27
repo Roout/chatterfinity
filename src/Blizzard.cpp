@@ -44,7 +44,6 @@ Blizzard::~Blizzard() {
     Console::Write("  -> close blizzard service\n");
     // TODO: 
     // - [ ] close io_context? context_->stop();
-    // - [ ] close ssl context? 
     for (auto& t: threads_) t.join();
 }
 
@@ -88,7 +87,7 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
             "(way)|(place where) this callback is being invoked"
         );
         auto shared = connection.lock();
-        shared->Write(request, [service
+        shared->ScheduleWrite(std::move(request), [service
             , callback = std::move(callback)
             , connection
         ]() {
@@ -138,7 +137,7 @@ void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuati
         );
 
         auto shared = connection.lock();
-        shared->Write(request, [service
+        shared->ScheduleWrite(std::move(request), [service
             , callback = std::move(callback)
             , connection
         ]() {
@@ -196,7 +195,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
         auto request = blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
         auto shared = connection.lock();
 
-        shared->Write(request, [service
+        shared->ScheduleWrite(std::move(request), [service
             , callback = std::move(callback)
             , connection
         ]() {

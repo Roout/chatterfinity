@@ -18,9 +18,9 @@ public:
     /**
      * Queue data to passibe buffer. 
      */
-    void Enque(const std::string& data) {
+    void Enque(std::string data) {
         assert(activeBuffer_ < buffers_.size());
-        buffers_[activeBuffer_ ^ 1].emplace_back(data);
+        buffers_[activeBuffer_ ^ 1].emplace_back(std::move(data));
     }
 
     /**
