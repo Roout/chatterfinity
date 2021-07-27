@@ -3,6 +3,7 @@
 #include <string_view>
 #include <string>
 #include <memory>
+#include <optional>
 #include <functional>
 
 #include <boost/asio.hpp>
@@ -10,6 +11,7 @@
 
 #include "Logger.hpp"
 #include "Response.hpp"
+#include "SwitchBuffer.hpp"
 
 using boost::asio::ip::tcp;
 namespace ssl = boost::asio::ssl;
@@ -18,40 +20,96 @@ class Connection :
     public std::enable_shared_from_this<Connection> 
 {
 public:
-    using io_context_pointer = std::shared_ptr<boost::asio::io_context>;
-    using ssl_context_pointer = std::shared_ptr<boost::asio::ssl::context>;
+    using SharedIOContext = std::shared_ptr<boost::asio::io_context>;
+    using SharedSSLContext = std::shared_ptr<boost::asio::ssl::context>;
+    using Stream = ssl::stream<tcp::socket>;
 
-    Connection(io_context_pointer
-        , ssl_context_pointer
-        , size_t id
+    Connection(SharedIOContext
+        , SharedSSLContext
         , std::string_view host
+        , std::string_view service
+        , size_t id
     );
+
+    virtual ~Connection();
 
     Connection(Connection&&) = delete;
     Connection& operator=(Connection&&) = delete;
     Connection(Connection const&) = delete;
     Connection& operator=(Connection const&) = delete;
-    ~Connection();
 
+    void ScheduleShutdown();
+
+    void Connect(std::function<void()> onConnect = {});
+
+    // FIXME: callbacks onWrite will be ignored when more than one message is queued 
+    // only last one will be called
+    void ScheduleWrite(std::string text, std::function<void()> onWrite = {});
+
+    virtual void Read(std::function<void()> onRead = {}) = 0;
+
+protected:
+
+    // NOTE: Can not be called outside because there will be a data race at least around `socket_`.
+    // Posting it through `strand_` gurantees that no other handler is being executed in other thread so
+    // it's safe to invoke `Close`
     void Close();
 
-    void Write(std::string text, std::function<void()> onSuccess = {});
+    // repeat the same actions via `onConnectSuccess_` callback 
+    // on successfull reconnection
+    void Reconnect();
 
-    net::http::Message AcquireResponse() noexcept;
+    void Write();
 
+    void OnResolve(const boost::system::error_code&, tcp::resolver::results_type);
+
+    void OnConnect(const boost::system::error_code&, const tcp::endpoint&);
+
+    void OnHandshake(const boost::system::error_code&);
+
+    void OnWrite(const boost::system::error_code&, size_t);
+
+    void OnTimeout(const boost::system::error_code&);
+
+protected:
+    // === Boost IO stuff ===
+    SharedIOContext context_ { nullptr };
+    SharedSSLContext ssl_ { nullptr };
+    tcp::resolver resolver_;
+    boost::asio::io_context::strand strand_;
+    std::optional<Stream> socket_;
+    boost::asio::deadline_timer timer_;
+
+    const std::string host_;
+    const std::string service_;    
+    std::shared_ptr<Log> log_ { nullptr };
+
+    // === callbacks ===
+    std::function<void()> onConnectSuccess_;
+    std::function<void()> onWriteSuccess_;
+    std::function<void()> onReadSuccess_;
+
+    // === Write ===
+    SwitchBuffer outbox_;
+    bool isWriting_ { false };
+
+    // === Reconnect ===
+    static constexpr size_t kReconnectLimit { 3 };
+    size_t reconnects_ { 0 };
+};
+
+class HttpConnection: public Connection {
+public:
+
+    using Connection::Connection;
+    
+    void Read(std::function<void()> onSuccess = {}) override;
+
+    net::http::Message AcquireResponse() noexcept {
+        return { std::move(header_), std::move(body_) };
+    }
 private:
-
     void ReadHeader();
-
-    void WriteBuffer();
-
-    void OnResolve(const boost::system::error_code& error, tcp::resolver::results_type results);
-
-    void OnConnect(const boost::system::error_code& error, const tcp::endpoint& endpoint);
-
-    void OnHandshake(const boost::system::error_code& error);
-
-    void OnWrite(const boost::system::error_code& error, size_t bytes);
 
     void OnHeaderRead(const boost::system::error_code& error, size_t bytes);
 
@@ -63,12 +121,8 @@ private:
 
     void OnReadChunkedBody(const boost::system::error_code& error, size_t bytes);
 
-    // TODO: temporary stuff; used while the exception system/error handling is not implemented
-    // Just `post` `Connection::Close` through `strand`
-    void InitiateSocketShutdown();
-
 private:
-    struct Chunk {
+    struct Chunk final {
         // size of chunk
         size_t size_ { 0 };
         // number of consumed (processed) chunks
@@ -83,25 +137,44 @@ private:
     static constexpr std::string_view kCRLF { "\r\n" };
     static constexpr std::string_view kHeaderDelimiter { "\r\n\r\n" };
 
-    // === Boost IO stuff ===
-    io_context_pointer context_ { nullptr };
-    ssl_context_pointer sslContext_ { nullptr };
-    tcp::resolver resolver_;
-    boost::asio::io_context::strand strand_;
-    ssl::stream<tcp::socket> socket_;
-    
-    // === Connection details === 
-    const size_t id_ { 0 };
-    const std::string host_ {};
-    std::shared_ptr<Log> log_ { nullptr };
-    std::function<void()> onSuccess_;
-
-    // === Read ===
+    // buffers
     boost::asio::streambuf inbox_;
-    net::http::Header header_;
     Chunk chunk_;
+    net::http::Header header_;
     net::http::Body body_;
-
-    // === Write ===
-    std::string outbox_;
 };
+
+class IrcConnection: public Connection {
+public:
+
+    using Connection::Connection;
+
+    void Read(std::function<void()> onSuccess = {}) override;
+
+    net::irc::Message AcquireResponse() noexcept {
+        return std::move(message_);
+    }
+private:
+    void OnRead(const boost::system::error_code& error, size_t bytes);
+
+    static constexpr std::string_view kCRLF { "\r\n" };
+ 
+    boost::asio::streambuf inbox_;
+    net::irc::Message message_;
+};
+
+namespace utils {
+    template <typename Derived, 
+        typename = std::enable_if_t<std::is_base_of_v<Connection, Derived>>
+    >
+    inline std::shared_ptr<Derived> SharedFrom(const std::shared_ptr<Connection>& base) {
+        return std::static_pointer_cast<Derived>(base);
+    }
+
+    template <typename Derived, 
+        typename = std::enable_if_t<std::is_base_of_v<Connection, Derived>>
+    >
+    inline std::weak_ptr<Derived> WeakFrom(const std::shared_ptr<Connection>& base) {
+        return std::static_pointer_cast<Derived>(base);
+    }
+}

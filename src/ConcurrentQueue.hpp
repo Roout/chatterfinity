@@ -1,3 +1,4 @@
+#pragma once
 // Source: https://gist.github.com/Roout/c3be2d97809758c3f6936c6b238c3b3a
 #include <mutex>
 #include <condition_variable>

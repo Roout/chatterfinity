@@ -5,18 +5,18 @@
 
 namespace chrono = std::chrono;
 
-class Token {
+class AccessToken {
 public:
     using TimePoint = chrono::time_point<chrono::steady_clock>;
     using Duration = chrono::seconds;
 
-    Token() 
+    AccessToken() 
         : content_ {}
         , update_ { chrono::steady_clock::now() }
         , duration_ { 0 }
     {}
 
-    Token(std::string token, Duration expireTime) 
+    AccessToken(std::string token, Duration expireTime) 
         : content_ { std::move(token) }
         , update_ { chrono::steady_clock::now() }
         , duration_ { expireTime }

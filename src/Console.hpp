@@ -7,6 +7,7 @@
 #include "Translator.hpp"
 #include "ConcurrentQueue.hpp"
 
+namespace service {
 // This is source of input 
 class Console {
 public:
@@ -19,9 +20,9 @@ public:
     
     ~Console();
 
-    static std::string ReadLn();
+    static std::string ReadLine();
 
-    static void ReadLn(std::string& buffer);
+    static void ReadLine(std::string& buffer);
 
     template<class ...Args>
     static void Write(Args&&...args);
@@ -65,10 +66,13 @@ private:
 template<typename ...Args>
 inline void Console::Write(Args&&...args) {
     std::lock_guard<std::mutex> lock { out_ };
-    ((std::cout << std::forward<Args>(args) << " "), ...);
+    std::cout << ">";
+    ((std::cout << " " << std::forward<Args>(args)), ...);
 }
 
 template<typename Command, typename Enable>
 inline void Console::Execute(Command&& cmd) {
     invoker_->Execute(std::forward<Command>(cmd));
 }
+
+} // namespace service

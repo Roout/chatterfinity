@@ -55,6 +55,73 @@ namespace {
     };
 }
 
+namespace twitch {
+
+// https://dev.twitch.tv/docs/authentication#sending-user-access-and-app-access-tokens
+std::string SendToken::Build() const {
+    const char *requestTemplate = 
+        "GET /helix/ HTTP/1.1\r\n"
+        "Host: api.twitch.tv\r\n"
+        "Authorization: Bearer %1%\r\n"
+        "\r\n";
+    
+    return (boost::format(requestTemplate) % token_).str();
+}
+
+std::string TokenRevoke::Build() const {
+    const char* bodyTemplate = "{\"client_id\":\"%1%\", \"token\":\"%2%\"}";
+    const auto body { (boost::format(bodyTemplate) % id_ % token_).str() };
+    const char *requestTemplate = 
+        "POST /oauth2/revoke HTTP/1.1\r\n"
+        "Host: id.twitch.tv\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: %1%\r\n"
+        "\r\n";
+
+    return (boost::format(requestTemplate) % body.size()).str() + body;
+}
+
+std::string Validation::Build() const {
+    const char *requestTemplate = 
+        "GET /oauth2/validate HTTP/1.1\r\n"
+        "Host: id.twitch.tv\r\n"
+        "Authorization: OAuth %1%\r\n"
+        "\r\n";
+    
+    return (boost::format(requestTemplate) % token_).str();
+}
+
+std::string Pong::Build() const {
+    return "PONG :tmi.twitch.tv\r\n";
+}
+
+std::string Chat::Build() const {
+    const char *requestTemplate = "PRIVMSG #%1% :%2%\r\n";
+    return (boost::format(requestTemplate) % channel_ % message_).str();
+}
+
+std::string Leave::Build() const {
+    // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
+    const char *requestTemplate = "PART #%1%\r\n";
+    return (boost::format(requestTemplate) % channel_).str();
+}
+
+
+std::string Join::Build() const {
+    // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
+    const char *requestTemplate = "JOIN #%1%\r\n";
+    return (boost::format(requestTemplate) % channel_).str();
+}
+
+std::string IrcAuth::Build() const {
+    const char *requestTemplate = 
+        "PASS oauth:%1%\r\n"
+        "NICK %2%\r\n";
+    return (boost::format(requestTemplate) % token_ % user_).str();
+};
+
+} // namespace twitch
+
 namespace blizzard {
 
 std::string CredentialsExchange::Build() const {
@@ -68,7 +135,7 @@ std::string CredentialsExchange::Build() const {
         "grant_type=client_credentials";
     
     return (boost::format(requestTemplate) 
-        % REGION 
+        % kRegion 
         % UrlBase64::Encode(id_ + ':' + secret_)
     ).str();
 }
@@ -82,10 +149,10 @@ std::string Realm::Build() const {
             "\r\n";
     
     return (boost::format(requestTemplate) 
-        % SERVER_SLUG 
-        % NAMESPACE
-        % LOCALE
-        % REGION
+        % kServerSlug 
+        % kNamespace
+        % kLocale
+        % kRegion
         % token_
     ).str();
 }
@@ -99,9 +166,9 @@ std::string RealmStatus::Build() const {
     
     return (boost::format(requestTemplate) 
         % connetedRealmId_
-        % NAMESPACE
-        % LOCALE
-        % REGION
+        % kNamespace
+        % kLocale
+        % kRegion
         % token_
     ).str();
 }

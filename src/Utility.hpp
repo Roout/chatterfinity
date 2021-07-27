@@ -36,6 +36,11 @@ namespace utils {
         return isEqual;
     }
 
+    inline std::string AsLowerCase(std::string str) noexcept {
+        for (auto&c: str) c = std::tolower(c);
+        return std::move(str);
+    }
+
     constexpr std::string_view Trim(
         std::string_view text, 
         std::string_view exclude = " \n\r\t\v\0"
