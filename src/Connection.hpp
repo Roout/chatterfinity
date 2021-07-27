@@ -42,6 +42,8 @@ public:
 
     void Connect(std::function<void()> onConnect = {});
 
+    // FIXME: callbacks onWrite will be ignored when more than one message is queued 
+    // only last one will be called
     void ScheduleWrite(std::string text, std::function<void()> onWrite = {});
 
     virtual void Read(std::function<void()> onRead = {}) = 0;
