@@ -6,8 +6,6 @@
 
 #include <exception>
 
-#include <boost/format.hpp>
-
 #include "rapidjson/document.h"
 
 namespace service {
@@ -46,7 +44,6 @@ Blizzard::~Blizzard() {
     Console::Write("  -> close blizzard service\n");
     // TODO: 
     // - [ ] close io_context? context_->stop();
-    // - [ ] close ssl context? 
     for (auto& t: threads_) t.join();
 }
 
@@ -75,9 +72,8 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     constexpr char * const kHost { "eu.api.blizzard.com" };
     constexpr char * const kService { "https" };
 
-    auto connection = std::make_shared<HttpConnection>(context_
-        , ssl_
-        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % GenerateId()).str()
+    auto connection = std::make_shared<HttpConnection>(
+        context_, ssl_ , kHost, kService, GenerateId()
     );
     auto onConnect = [request = blizzard::Realm(token_.Get()).Build()
         , service = this
@@ -91,7 +87,7 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
             "(way)|(place where) this callback is being invoked"
         );
         auto shared = connection.lock();
-        shared->Write(request, [service
+        shared->ScheduleWrite(std::move(request), [service
             , callback = std::move(callback)
             , connection
         ]() {
@@ -118,15 +114,14 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
             shared->Read(std::move(OnReadSuccess));
         });
     };
-    connection->Connect(kHost, kService, std::move(onConnect));
+    connection->Connect(std::move(onConnect));
 }
 
 void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuation) {
     constexpr char * const kHost { "eu.api.blizzard.com" };
     constexpr char * const kService { "https" };
-    auto connection = std::make_shared<HttpConnection>(context_
-        , ssl_
-        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % GenerateId()).str()
+    auto connection = std::make_shared<HttpConnection>(
+        context_, ssl_ , kHost, kService, GenerateId()
     );
     // TODO: remove token => use config!
     auto onConnect = [request = blizzard::RealmStatus(realmId, token_.Get()).Build()
@@ -142,7 +137,7 @@ void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuati
         );
 
         auto shared = connection.lock();
-        shared->Write(request, [service
+        shared->ScheduleWrite(std::move(request), [service
             , callback = std::move(callback)
             , connection
         ]() {
@@ -175,16 +170,15 @@ void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuati
             shared->Read(std::move(OnReadSuccess));
         });
     };
-    connection->Connect(kHost, kService, std::move(onConnect));
+    connection->Connect(std::move(onConnect));
 }
 
 void Blizzard::AcquireToken(std::function<void()> continuation) {
     constexpr char * const kHost { "eu.battle.net" };
     constexpr char * const kService { "https" };
 
-    auto connection = std::make_shared<HttpConnection>(context_
-        , ssl_
-        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % GenerateId()).str()
+    auto connection = std::make_shared<HttpConnection>(
+        context_, ssl_ , kHost, kService, GenerateId()
     );
 
     auto onConnect = [service = this
@@ -201,7 +195,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
         auto request = blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
         auto shared = connection.lock();
 
-        shared->Write(request, [service
+        shared->ScheduleWrite(std::move(request), [service
             , callback = std::move(callback)
             , connection
         ]() {
@@ -242,7 +236,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
             shared->Read(std::move(OnReadSuccess));
         });
     };
-    connection->Connect(kHost, kService, std::move(onConnect));
+    connection->Connect(std::move(onConnect));
 }
 
 void Blizzard::Invoker::Execute(command::RealmID) {

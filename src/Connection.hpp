@@ -10,6 +10,7 @@
 
 #include "Logger.hpp"
 #include "Response.hpp"
+#include "SwitchBuffer.hpp"
 
 using boost::asio::ip::tcp;
 namespace ssl = boost::asio::ssl;
@@ -21,7 +22,12 @@ public:
     using SharedIOContext = std::shared_ptr<boost::asio::io_context>;
     using SharedSSLContext = std::shared_ptr<boost::asio::ssl::context>;
 
-    Connection(SharedIOContext, SharedSSLContext, const std::string& log);
+    Connection(SharedIOContext
+        , SharedSSLContext
+        , std::string_view host
+        , std::string_view service
+        , size_t id
+    );
 
     virtual ~Connection();
 
@@ -32,15 +38,19 @@ public:
 
     void Close();
 
-    void Connect(std::string_view host
-        , std::string_view service
-        , std::function<void()> onConnect = {});
+    void ScheduleShutdown();
 
-    void Write(std::string text, std::function<void()> onWrite = {});
+    void Connect(std::function<void()> onConnect = {});
+
+    // FIXME: callbacks onWrite will be ignored when more than one message is queued 
+    // only last one will be called
+    void ScheduleWrite(std::string text, std::function<void()> onWrite = {});
 
     virtual void Read(std::function<void()> onRead = {}) = 0;
 
 protected:
+
+    void Write();
 
     void OnResolve(const boost::system::error_code& error, tcp::resolver::results_type results);
 
@@ -50,10 +60,6 @@ protected:
 
     void OnWrite(const boost::system::error_code& error, size_t bytes);
 
-    // TODO: temporary stuff; used while the exception system/error handling is not implemented
-    // Just `post` `Connection::Close` through `strand`
-    void InitiateSocketShutdown();
-
 protected:
     // === Boost IO stuff ===
     SharedIOContext context_ { nullptr };
@@ -61,14 +67,17 @@ protected:
     tcp::resolver resolver_;
     boost::asio::io_context::strand strand_;
     ssl::stream<tcp::socket> socket_;
-    
+
+    const std::string host_;
+    const std::string service_;    
     std::shared_ptr<Log> log_ { nullptr };
     std::function<void()> onConnectSuccess_;
     std::function<void()> onWriteSuccess_;
     std::function<void()> onReadSuccess_;
 
     // === Write ===
-    std::string outbox_;
+    SwitchBuffer outbox_;
+    bool isWriting_ { false };
 };
 
 class HttpConnection: public Connection {

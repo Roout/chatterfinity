@@ -5,8 +5,6 @@
 #include "Command.hpp"
 #include "Utility.hpp"
 
-#include <boost/format.hpp>
-
 #include "rapidjson/document.h"
 
 namespace service {
@@ -106,7 +104,7 @@ void Twitch::Invoker::Execute(command::Pong) {
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(pongRequest), []() {
+    twitch_->irc_->ScheduleWrite(std::move(pongRequest), []() {
         Console::Write("send pong request\n");
     });
 }
@@ -116,9 +114,8 @@ void Twitch::Invoker::Execute(command::Validate) {
     constexpr std::string_view kService { "https" };
     const size_t kId { 0 };
 
-    auto connection = std::make_shared<HttpConnection>(twitch_->context_
-        , twitch_->ssl_
-        , (boost::format("%1%_%2%_%3%.txt") % kHost % kService % kId).str()
+    auto connection = std::make_shared<HttpConnection>(
+        twitch_->context_, twitch_->ssl_, kHost, kService, kId
     );
 
     const Config::Identity kIdentity { "twitch" };
@@ -137,7 +134,7 @@ void Twitch::Invoker::Execute(command::Validate) {
             "(way)|(place where) this callback is being invoked"
         );
         auto shared = connection.lock();
-        shared->Write(request, [twitchService, connection]() {
+        shared->ScheduleWrite(std::move(request), [twitchService, connection]() {
             assert(connection.use_count() == 1);
 
             auto OnReadSuccess = [twitchService, connection]() {
@@ -165,7 +162,7 @@ void Twitch::Invoker::Execute(command::Validate) {
             shared->Read(std::move(OnReadSuccess));
         });
     };
-    connection->Connect(kHost, kService, std::move(onConnect));
+    connection->Connect(std::move(onConnect));
 }
 
 void Twitch::Invoker::Execute(command::Shutdown) {
@@ -177,7 +174,7 @@ void Twitch::Invoker::Execute(command::Join cmd) {
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(join), []() {
+    twitch_->irc_->ScheduleWrite(std::move(join), []() {
         Console::Write("send join channel request\n");
     });
 }
@@ -187,7 +184,7 @@ void Twitch::Invoker::Execute(command::Chat cmd) {
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(chat), []() {
+    twitch_->irc_->ScheduleWrite(std::move(chat), []() {
         Console::Write("send message tp channel\n");
     });
 }
@@ -197,7 +194,7 @@ void Twitch::Invoker::Execute(command::Leave cmd) {
     assert(true && "TODO: Confirm that connection is alive"
         "after introducing connection state"
     );
-    twitch_->irc_->Write(std::move(leave), []() {
+    twitch_->irc_->ScheduleWrite(std::move(leave), []() {
         Console::Write("send part channel request\n");
     });
 }
@@ -213,22 +210,25 @@ void Twitch::Invoker::Execute(command::Login cmd) {
         twitch_->irc_.reset();
     }
 
+    const size_t id { 0 };
     twitch_->irc_ = std::make_shared<IrcConnection>(twitch_->context_
         , twitch_->ssl_
-        ,  (boost::format("%1%_%2%.txt") % twitch::kHost % twitch::kService).str()
+        , twitch::kHost
+        , twitch::kService
+        , id
     );
 
     auto onConnect = [request = std::move(connectRequest)
         , twitchService = twitch_
         , irc = twitch_->irc_.get()
     ]() {
-        irc->Write(std::move(request), [twitchService, irc]() {
+        irc->ScheduleWrite(std::move(request), [twitchService, irc]() {
             irc->Read([twitchService, irc]() {
                 twitchService->HandleResponse(irc->AcquireResponse());
             });
         });
     };
-    twitch_->irc_->Connect(twitch::kHost, twitch::kService, std::move(onConnect));
+    twitch_->irc_->Connect(std::move(onConnect));
     
 }
 
