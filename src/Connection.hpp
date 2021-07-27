@@ -3,6 +3,7 @@
 #include <string_view>
 #include <string>
 #include <memory>
+#include <optional>
 #include <functional>
 
 #include <boost/asio.hpp>
@@ -21,6 +22,7 @@ class Connection :
 public:
     using SharedIOContext = std::shared_ptr<boost::asio::io_context>;
     using SharedSSLContext = std::shared_ptr<boost::asio::ssl::context>;
+    using Stream = ssl::stream<tcp::socket>;
 
     Connection(SharedIOContext
         , SharedSSLContext
@@ -36,8 +38,6 @@ public:
     Connection(Connection const&) = delete;
     Connection& operator=(Connection const&) = delete;
 
-    void Close();
-
     void ScheduleShutdown();
 
     void Connect(std::function<void()> onConnect = {});
@@ -50,15 +50,26 @@ public:
 
 protected:
 
+    // NOTE: Can not be called outside because there will be a data race at least around `socket_`.
+    // Posting it through `strand_` gurantees that no other handler is being executed in other thread so
+    // it's safe to invoke `Close`
+    void Close();
+
+    // repeat the same actions via `onConnectSuccess_` callback 
+    // on successfull reconnection
+    void Reconnect();
+
     void Write();
 
-    void OnResolve(const boost::system::error_code& error, tcp::resolver::results_type results);
+    void OnResolve(const boost::system::error_code&, tcp::resolver::results_type);
 
-    void OnConnect(const boost::system::error_code& error, const tcp::endpoint& endpoint);
+    void OnConnect(const boost::system::error_code&, const tcp::endpoint&);
 
-    void OnHandshake(const boost::system::error_code& error);
+    void OnHandshake(const boost::system::error_code&);
 
-    void OnWrite(const boost::system::error_code& error, size_t bytes);
+    void OnWrite(const boost::system::error_code&, size_t);
+
+    void OnTimeout(const boost::system::error_code&);
 
 protected:
     // === Boost IO stuff ===
@@ -66,11 +77,14 @@ protected:
     SharedSSLContext ssl_ { nullptr };
     tcp::resolver resolver_;
     boost::asio::io_context::strand strand_;
-    ssl::stream<tcp::socket> socket_;
+    std::optional<Stream> socket_;
+    boost::asio::deadline_timer timer_;
 
     const std::string host_;
     const std::string service_;    
     std::shared_ptr<Log> log_ { nullptr };
+
+    // === callbacks ===
     std::function<void()> onConnectSuccess_;
     std::function<void()> onWriteSuccess_;
     std::function<void()> onReadSuccess_;
@@ -78,6 +92,10 @@ protected:
     // === Write ===
     SwitchBuffer outbox_;
     bool isWriting_ { false };
+
+    // === Reconnect ===
+    static constexpr size_t kReconnectLimit { 3 };
+    size_t reconnects_ { 0 };
 };
 
 class HttpConnection: public Connection {

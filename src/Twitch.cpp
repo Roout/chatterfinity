@@ -53,10 +53,11 @@ Twitch::~Twitch() {
 void Twitch::ResetWork() {
     work_.reset();
     if (irc_) {
-        irc_->Close();
+        irc_->ScheduleShutdown();
         irc_.reset();
     }
-    context_->stop();
+    // don't stop context to let it finish all jobs 
+    // and shutdown connections gracefully
 }
 
 void Twitch::Run() {
@@ -206,7 +207,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
     // Check to be able reconnect using external approach (not in connection interface)
     // TODO: implement internal one for the connection
     if (twitch_->irc_) {
-        twitch_->irc_->Close();
+        // twitch_->irc_->ScheduleShutdown();
         twitch_->irc_.reset();
     }
 
