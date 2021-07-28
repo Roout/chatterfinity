@@ -9,15 +9,17 @@
 
 namespace service {
 
-Twitch::Twitch(const Config *config) 
+Twitch::Twitch(const Config *config, Container * outbox) 
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
     , translator_ {}
     , invoker_ { std::make_unique<Invoker>(this) }
     , config_ { config }
+    , outbox_ { outbox }
 {
     assert(config_ && "Config is NULL");
+    assert(outbox_ && "Queue is NULL");
     /**
      * [Amazon CA](https://www.amazontrust.com/repository/)
      * Distinguished Name:

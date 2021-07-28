@@ -4,9 +4,11 @@
 #include <condition_variable>
 #include <array>
 #include <cassert>
+#include <optional>
 #include <type_traits>
 
-template<typename T, std::size_t Capacity = 255>
+
+template<typename T, std::size_t Capacity>
 class CcQueue {
 public:
     static_assert(std::is_move_constructible_v<T>, "T must be move-constructible");

@@ -6,12 +6,15 @@
 #include "Command.hpp"
 #include "Translator.hpp"
 #include "ConcurrentQueue.hpp"
+#include "Environment.hpp"
 
 namespace service {
 // This is source of input 
 class Console {
 public:
-    Console(CcQueue<command::RawCommand> * inbox);
+    using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
+
+    Console(Container * inbox);
 
     Console(const Console&) = delete;
     Console(Console&&) = delete;
@@ -38,7 +41,7 @@ public:
 private:
     class Invoker;
 
-    CcQueue<command::RawCommand> * const inbox_ { nullptr };
+    Container * const inbox_ { nullptr };
     Translator translator_ {};
 
     bool running_ { true };
