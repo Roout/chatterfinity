@@ -6,6 +6,8 @@
 
 #include "Command.hpp"
 #include "Token.hpp"
+#include "ConcurrentQueue.hpp"
+#include "Environment.hpp"
 
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
@@ -22,7 +24,9 @@ class Blizzard
     : public std::enable_shared_from_this<Blizzard> 
 {
 public:
-    Blizzard(const Config *config);
+    using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
+    
+    Blizzard(const Config *config, Container * outbox);
 
     Blizzard(const Blizzard&) = delete;
     Blizzard(Blizzard&&) = delete;
@@ -48,7 +52,7 @@ private:
 
     void QueryRealm(std::function<void(size_t realmId)> continuation = {});
 
-    void QueryRealmStatus(size_t realmId, std::function<void()> continuation = {});
+    void QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::function<void()> continuation = {});
 
     void AcquireToken(std::function<void()> continuation = {});
 
@@ -69,6 +73,8 @@ private:
 
     std::unique_ptr<Invoker> invoker_;
     const Config * const config_ { nullptr };
+    Container * const outbox_ { nullptr };
+    
     // connection id
     static inline size_t lastID_ { 0 };
 };

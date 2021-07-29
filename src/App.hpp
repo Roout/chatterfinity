@@ -27,7 +27,7 @@ public:
     App() 
         : commands_ { kSentinel }
         , config_ { kConfigPath }
-        , blizzard_ { std::make_shared<service::Blizzard>(&config_) }
+        , blizzard_ { std::make_shared<service::Blizzard>(&config_, &commands_) }
         , twitch_ { std::make_shared<service::Twitch>(&config_, &commands_) }
         , console_ { &commands_ }
     {
