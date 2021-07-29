@@ -1,5 +1,5 @@
-#pragma once
 // Source: https://gist.github.com/Roout/c3be2d97809758c3f6936c6b238c3b3a
+#pragma once
 #include <mutex>
 #include <condition_variable>
 #include <array>
@@ -28,7 +28,7 @@ public:
         assert(front_ == back_);
     }
 
-    // return true if value was pushed successfully
+    // return true if value was pushed successfully (queue is not full)
     // otherwise return false on failure and doesn't block
     [[nodiscard]] bool TryPush(element cmd) {
         bool isPushed = false;
