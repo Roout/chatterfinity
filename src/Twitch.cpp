@@ -22,14 +22,6 @@ Twitch::Twitch(const Config *config, Container * outbox)
     assert(outbox_ && "Queue is NULL");
     /**
      * [Amazon CA](https://www.amazontrust.com/repository/)
-     * Distinguished Name:
-     * ```
-     * CN=Starfield Services Root Certificate Authority - G2,
-     * O=Starfield Technologies\, Inc.,
-     * L=Scottsdale,
-     * ST=Arizona,
-     * C=US
-     * ```
      * TODO: read this path from secret + with some chiper
     */
     const char * const kVerifyFilePath = "crt/StarfieldServicesRootCA.crt.pem";
@@ -41,8 +33,9 @@ Twitch::Twitch(const Config *config, Container * outbox)
 
     using namespace std::literals::string_view_literals;
     std::initializer_list<Translator::Pair> list {
-        { "help"sv,     Translator::CreateHandle<command::Help>(*this) },
-        { "ping"sv,     Translator::CreateHandle<command::Pong>(*this) }
+        { "help"sv,         Translator::CreateHandle<command::Help>(*this) },
+        { "ping"sv,         Translator::CreateHandle<command::Pong>(*this) },
+        { "realm-status"sv, Translator::CreateHandle<command::RealmStatus>(*this) }
     };
     translator_.Insert(list);
 }
@@ -253,6 +246,20 @@ void Twitch::Invoker::Execute(command::Login cmd) {
     twitch_->irc_->Connect(std::move(onConnect));
 }
 
-
+void Twitch::Invoker::Execute(command::RealmStatus cmd) {
+    assert(twitch_ && "Cannot be null");
+    // TODO: still need to handle the case when all attempt to reconnect failed!
+    if (twitch_->irc_) {
+        Console::Write("irc connection has already been established\n");
+        return;
+    }
+    command::RawCommand raw { "realm-status", { std::move(cmd.initiator_) }};
+    if (twitch_->outbox_->TryPush(std::move(raw))) {
+        Console::Write("twitch: push `RealmStatus` to queue\n");
+    }
+    else {
+        Console::Write("twitch: failed to push `RealmStatus` to queue is full\n");
+    }
+}
 
 } // namespace service
