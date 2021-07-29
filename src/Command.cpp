@@ -1,10 +1,34 @@
 #include "Command.hpp"
+#include "Utility.hpp"
 
+// services (used as context for commands)
 #include "Twitch.hpp"
-// #include "Blizzard.hpp"
-// #include "Console.hpp"
+#include "Blizzard.hpp"
+#include "Console.hpp"
 
 namespace command {
+
+    RealmStatus RealmStatus::Create(const service::Blizzard& ctx,
+        const Params& params
+    ) {
+        if (params.size() == 2) {
+            std::string channel { params[0] };
+            std::string initiator { params[1] };
+            return { std::move(channel), std::move(initiator) };
+        }
+        return {};
+    }
+
+    RealmStatus RealmStatus::Create(const service::Twitch& ctx,
+        const Params& params
+    ) {
+        if (params.size() == 2) {
+            std::string channel { params[0] };
+            std::string initiator { params[1] };
+            return { std::move(channel), std::move(initiator) };
+        }
+        return {};
+    }
 
     Login Login::Create(const service::Twitch& ctx, const Params& params) {
         if (params.size() == 2) {
