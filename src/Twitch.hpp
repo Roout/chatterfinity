@@ -22,12 +22,6 @@ namespace service {
 namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
-
-/**
- * NOTE:
- *  - Uses Implicit code flow	
- *  https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#oauth-implicit-code-flow
- */
 class Twitch 
     : public std::enable_shared_from_this<Twitch> 
 {
