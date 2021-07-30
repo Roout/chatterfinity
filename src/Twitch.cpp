@@ -74,55 +74,79 @@ void Twitch::Run() {
     }
 }
 
+namespace {
+    std::string ExtractBetween(const std::string& src, char left, char right) {
+        const auto leftDelim = src.find(left);
+        const auto rightDelim = src.find(right, leftDelim);
+        if (leftDelim == std::string::npos || rightDelim == std::string::npos) {
+            return {};
+        } 
+        else {
+            return { src.substr(leftDelim + 1, rightDelim - leftDelim - 1) };
+        }
+    }
+
+    inline std::string_view ShiftView(const std::string& src, size_t shift) noexcept {
+        assert(shift < src.size());
+        return { src.data() + shift, src.size() - shift};
+    }
+}
+
 void Twitch::HandleResponse(net::irc::Message message) {
-    // extract command form the simple message
+    using IrcCommands = net::irc::IrcCommands;
+
+    constexpr IrcCommands ircCmds;
     enum { kChannel, kCommand, kRequiredFields };
-    constexpr char kCommandSign { '!' };
-    constexpr char* const kIrcMsgCommand { "PRIVMSG" };
-    constexpr char* const kIrcPingCommand { "PING" };
 
-    // TODO: unify this case with other ones
-    auto& ircParams { message.params_ };
-    if (message.command_ == kIrcMsgCommand 
-        && ircParams.size() >= kRequiredFields
-        && ircParams[kCommand].front() == kCommandSign
-    ) {
-        std::transform(ircParams[kCommand].cbegin(), ircParams[kCommand].cend()
-            , ircParams[kCommand].begin(), std::tolower);
-
-        std::string_view twitchCommand { 
-            ircParams[kCommand].data() + 1 // skipped `kCommandSign`
-            , ircParams[kCommand].size() - 1 };
-
-        if (auto handle = translator_.GetHandle(twitchCommand); handle) {
-            // username (nick) has to be between (! ... @)
-            auto leftDelim = message.prefix_.find('!');
-            assert(leftDelim != std::string::npos && "wrong understanding of IRC format");
-            auto rightDelim = message.prefix_.find('@', leftDelim);
-            assert(rightDelim != std::string::npos && "wrong understanding of IRC format");
-
-            auto user { message.prefix_.substr(leftDelim + 1, rightDelim - leftDelim - 1) };
-            std::string_view twitchChannel { 
-                ircParams[kChannel].data() + 1 // skipped channel prefix: #
-                , ircParams[kChannel].size() - 1 };
-
-            Translator::Params commandParams { twitchChannel, user };
-            Console::Write("[twitch] command:", twitchCommand, 
-                "; params:", commandParams[0], commandParams[1], '\n');
-            std::invoke(*handle, commandParams);
-        }
+    { // Debug:
+        std::string raw = "prefix: " + message.prefix_ 
+            + "; command: " + message.command_ + "; params:";
+        for (auto& p: message.params_) raw += " " + p;
+        Console::Write("[twitch] read:", raw, '\n');
     }
-    else if (message.command_ == kIrcPingCommand) {
-        if (auto handle = translator_.GetHandle("ping"); handle) {
-            std::invoke(*handle, Translator::Params{});
-        }
+
+    const auto ircCmdKind = ircCmds.Get(message.command_);
+    if (!ircCmdKind) return;
+
+    switch (*ircCmdKind) {
+        case IrcCommands::kPrivMsg: {
+            // user command, not IRC command
+            enum Sign : char { kChannelSign = '#', kCommandSign = '!'};
+            auto& ircParams { message.params_ };
+
+            // is user-defined command
+            if (ircParams.size() >= kRequiredFields
+                && ircParams[kChannel].front() == kChannelSign
+                && ircParams[kCommand].front() == kCommandSign
+            ) {
+                std::transform(ircParams[kCommand].cbegin()
+                    , ircParams[kCommand].cend()
+                    , ircParams[kCommand].begin()
+                    , std::tolower);
+
+                // skipped `kCommandSign`
+                auto twitchCommand { ShiftView(ircParams[kCommand], 1) };
+                if (auto handle = translator_.GetHandle(twitchCommand); handle) {
+                    // username (nick) has to be between (! ... @)
+                    auto user = ExtractBetween(message.prefix_, '!', '@');
+                    assert(!user.empty() && "wrong understanding of IRC format");
+                    // skipped channel prefix: #
+                    auto twitchChannel { ShiftView(ircParams[kChannel], 1) };
+
+                    Translator::Params commandParams { twitchChannel, user };
+                    Console::Write("[twitch] command:", twitchCommand, 
+                        "; params:", commandParams[0], commandParams[1], '\n');
+                    std::invoke(*handle, commandParams);
+                }
+            }
+        } break;
+        case IrcCommands::kPing: {
+            if (auto handle = translator_.GetHandle("ping"); handle) {
+                std::invoke(*handle, Translator::Params{});
+            }
+        } break;
+        default: assert(false);
     }
-    
-    // Debug:
-    std::string raw = "prefix: " + message.prefix_ 
-        + "; command: " + message.command_ + "; params:";
-    for (auto& p: message.params_) raw += " " + p;
-    Console::Write("[twitch] read:", raw, '\n');
 }
 
 void Twitch::Invoker::Execute(command::Help) {
@@ -134,12 +158,12 @@ void Twitch::Invoker::Execute(command::Pong) {
     // TODO: still need to handle the case 
     // when `irc_` is alive but failed [re-]connect!
     if (!twitch_->irc_) {
-        Console::Write("pong: irc connection is not established\n");
+        Console::Write("[twitch] pong: irc connection is not established\n");
     }
     else {
         auto pongRequest = twitch::Pong{}.Build();
         twitch_->irc_->ScheduleWrite(std::move(pongRequest), []() {
-            Console::Write("send pong request\n");
+            Console::Write("[twitch] send pong request\n");
         });
     }
 }
@@ -184,10 +208,10 @@ void Twitch::Invoker::Execute(command::Validate) {
                     json.Parse(body.data(), body.size());
                     auto login = json["login"].GetString();
                     auto expiration = json["expires_in"].GetUint64();
-                    Console::Write("validation success. Login:", login, "Expire in:", expiration, '\n');
+                    Console::Write("[twitch] validation success. Login:", login, "Expire in:", expiration, '\n');
                 }
                 else {
-                    Console::Write("[ERROR] validation failed. Status:"
+                    Console::Write("[ERROR] [twitch] validation failed. Status:"
                         , head.statusCode_
                         , head.reasonPhrase_
                         , '\n', body, '\n'
@@ -211,12 +235,12 @@ void Twitch::Invoker::Execute(command::Join cmd) {
     // TODO: still need to handle the case 
     // when `irc_` is alive but failed [re-]connect!
     if (!twitch_->irc_) {
-        Console::Write("join: irc connection is not established\n");
+        Console::Write("[twitch] join: irc connection is not established\n");
     }
     else {
         auto join = twitch::Join{cmd.channel_}.Build();
         twitch_->irc_->ScheduleWrite(std::move(join), []() {
-            Console::Write("send join channel request\n");
+            Console::Write("[twitch] send join channel request\n");
         });
     }
 }
@@ -226,13 +250,12 @@ void Twitch::Invoker::Execute(command::Chat cmd) {
     // TODO: still need to handle the case 
     // when `irc_` is alive but failed [re-]connect!
     if (!twitch_->irc_) {
-        Console::Write("chat: irc connection is not established\n");
+        Console::Write("[twitch] chat: irc connection is not established\n");
     }
     else {
         auto chat = twitch::Chat{cmd.channel_, cmd.message_}.Build();
-        Console::Write("trying to send message:", chat, '\n');
         twitch_->irc_->ScheduleWrite(std::move(chat), []() {
-            Console::Write("send message to channel\n");
+            Console::Write("[twitch] send message to channel\n");
         });
     }
 }
@@ -242,12 +265,12 @@ void Twitch::Invoker::Execute(command::Leave cmd) {
     // TODO: still need to handle the case 
     // when `irc_` is alive but failed [re-]connect!
     if (!twitch_->irc_) {
-        Console::Write("leave: irc connection is not established\n");
+        Console::Write("[twitch] leave: irc connection is not established\n");
     }
     else {
         auto leave = twitch::Leave{cmd.channel_}.Build();
         twitch_->irc_->ScheduleWrite(std::move(leave), []() {
-            Console::Write("send part channel request\n");
+            Console::Write("[twitch] send part channel request\n");
         });
     }
 }
@@ -256,7 +279,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
     assert(twitch_ && "Cannot be null");
     // TODO: still need to handle the case when all attempt to reconnect failed!
     if (twitch_->irc_) {
-        Console::Write("irc connection is already established\n");
+        Console::Write("[twitch] irc connection is already established\n");
         return;
     }
 
