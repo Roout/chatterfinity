@@ -152,11 +152,19 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
                 const std::string name = front["name"].GetString();
                 const auto hasQueue = json["has_queue"].GetBool();
                 const std::string status = json["status"]["type"].GetString();
-
-                auto message = "@" + cmd.initiator_ + ", " + name + "(" + status + "): " + (hasQueue? "has queue": "no queue");
-                command::RawCommand raw { "chat", { std::move(cmd.channel_), std::move(message) } };
-                if (!service->outbox_->TryPush(std::move(raw))) {
-                    Console::Write("[blizzard] fail to push realm-status response to queue: is full\n");
+                
+                // TODO: update this temporary solution base on IF
+                if (cmd.initiator_.empty()) { // the sourceof the command is 
+                    auto message = name + "(" + status + "): " + (hasQueue? "has queue": "no queue");
+                    Console::Write("[blizzard] recv:", message, '\n');
+                }
+                else {
+                    auto message = "@" + cmd.initiator_ + ", " + name 
+                        + "(" + status + "): " + (hasQueue? "has queue": "no queue");
+                    command::RawCommand raw { "chat", { std::move(cmd.channel_), std::move(message) } };
+                    if (!service->outbox_->TryPush(std::move(raw))) {
+                        Console::Write("[blizzard] fail to push realm-status response to queue: is full\n");
+                    }
                 }
                
                 if (callback) {
