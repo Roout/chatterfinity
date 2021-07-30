@@ -1,12 +1,14 @@
-#pragma once
 // Source: https://gist.github.com/Roout/c3be2d97809758c3f6936c6b238c3b3a
+#pragma once
 #include <mutex>
 #include <condition_variable>
 #include <array>
 #include <cassert>
+#include <optional>
 #include <type_traits>
 
-template<typename T, std::size_t Capacity = 255>
+
+template<typename T, std::size_t Capacity>
 class CcQueue {
 public:
     static_assert(std::is_move_constructible_v<T>, "T must be move-constructible");
@@ -26,7 +28,7 @@ public:
         assert(front_ == back_);
     }
 
-    // return true if value was pushed successfully
+    // return true if value was pushed successfully (queue is not full)
     // otherwise return false on failure and doesn't block
     [[nodiscard]] bool TryPush(element cmd) {
         bool isPushed = false;

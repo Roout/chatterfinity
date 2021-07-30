@@ -27,10 +27,15 @@ namespace command {
         }
     };
 
+    // initiated by the twitch's user chat message
+    // passed by Twitch service to Blizzard
+    // executed by Blizzard service: acquire data from the remote server
     struct RealmStatus {
-        static RealmStatus Create(const service::Blizzard& ctx, const Params& params) {
-            return {};
-        }
+        std::string channel_;  // used by twitch
+        std::string initiator_;  // used by twitch
+
+        static RealmStatus Create(const service::Blizzard& ctx, const Params& params);
+        static RealmStatus Create(const service::Twitch& ctx, const Params& params);
     };
 
     struct AccessToken {
@@ -121,6 +126,7 @@ namespace command {
                 || std::is_same_v<T, Join>
                 || std::is_same_v<T, Leave>
                 || std::is_same_v<T, Pong>
+                || std::is_same_v<T, RealmStatus> // pass it to the next layer (App)
                 || std::is_same_v<T, Chat>
             };
         };
@@ -133,7 +139,8 @@ namespace command {
         constexpr bool is_twitch_api_v = is_twitch_api<T>::value;
 
         template<typename T>
-        constexpr bool is_service_v { is_blizzard_api_v<T>
+        constexpr bool is_service_v { 
+            is_blizzard_api_v<T>
             || is_console_api_v<T>
             || is_twitch_api_v<T>
         };

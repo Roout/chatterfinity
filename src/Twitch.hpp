@@ -12,6 +12,8 @@
 #include "Config.hpp"
 #include "Response.hpp"
 #include "Translator.hpp"
+#include "ConcurrentQueue.hpp"
+#include "Environment.hpp"
 
 class IrcConnection;
 
@@ -26,9 +28,13 @@ using boost::asio::ip::tcp;
  *  - Uses Implicit code flow	
  *  https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#oauth-implicit-code-flow
  */
-class Twitch : public std::enable_shared_from_this<Twitch> {
+class Twitch 
+    : public std::enable_shared_from_this<Twitch> 
+{
 public:
-    Twitch(const Config *config);
+    using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
+
+    Twitch(const Config *config, Container * outbox);
     ~Twitch();
     Twitch(const Twitch&) = delete;
     Twitch(Twitch&&) = delete;
@@ -65,6 +71,8 @@ private:
     Translator translator_;
     
     const Config * const config_ { nullptr };
+    Container * const outbox_ { nullptr };
+    
     std::unique_ptr<Invoker> invoker_;
 };
 
@@ -80,6 +88,7 @@ public:
     void Execute(command::Join);
     void Execute(command::Leave);
     void Execute(command::Chat);
+    void Execute(command::RealmStatus);
 
 private:
     Twitch * const twitch_ { nullptr };

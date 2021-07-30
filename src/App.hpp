@@ -8,8 +8,10 @@
 #include <boost/asio/ssl.hpp>
 // common:
 #include "Command.hpp"
+#include "ConcurrentQueue.hpp"
 #include "Translator.hpp"
 #include "Config.hpp"
+#include "Environment.hpp"
 // services:
 #include "Console.hpp"
 #include "Blizzard.hpp"
@@ -20,11 +22,13 @@ using boost::asio::ip::tcp;
 
 class App {
 public:
+    using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
+
     App() 
         : commands_ { kSentinel }
         , config_ { kConfigPath }
-        , blizzard_ { std::make_shared<service::Blizzard>(&config_) }
-        , twitch_ { std::make_shared<service::Twitch>(&config_) }
+        , blizzard_ { std::make_shared<service::Blizzard>(&config_, &commands_) }
+        , twitch_ { std::make_shared<service::Twitch>(&config_, &commands_) }
         , console_ { &commands_ }
     {
         config_.Read();
@@ -91,7 +95,7 @@ private:
 
     std::vector<std::thread> workers_;
     // common queue
-    CcQueue<command::RawCommand> commands_;
+    Container commands_;
     Translator translator_;
     // configuration and settings
     Config config_;

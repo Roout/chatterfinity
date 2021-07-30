@@ -16,8 +16,8 @@
 using boost::asio::ip::tcp;
 namespace ssl = boost::asio::ssl;
 
-class Connection : 
-    public std::enable_shared_from_this<Connection> 
+class Connection 
+    : public std::enable_shared_from_this<Connection> 
 {
 public:
     using SharedIOContext = std::shared_ptr<boost::asio::io_context>;

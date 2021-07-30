@@ -3,7 +3,7 @@
 
 namespace service {
 
-Console::Console(CcQueue<command::RawCommand> * inbox) 
+Console::Console(Container * inbox) 
     : inbox_ { inbox }
     , translator_ {}
     , invoker_ { std::make_unique<Invoker>(this) }

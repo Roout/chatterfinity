@@ -10,29 +10,19 @@
 
 namespace service {
 
-Blizzard::Blizzard(const Config *config) 
+Blizzard::Blizzard(const Config *config, Container * outbox) 
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
     , invoker_ { std::make_unique<Invoker>(this) }
     , config_ { config }
+    , outbox_ { outbox }
 {
     assert(config_ && "Config is NULL");
 
     const char * const kVerifyFilePath = "crt/DigiCertHighAssuranceEVRootCA.crt.pem";
-    /**
-     * [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
-     * Cert Chain:
-     * ```
-     * DigiCert High Assurance EV Root CA 
-     *  => DigiCert SHA2 High Assurance Server CA 
-     *  => *.battle.net
-     * ```
-     * So root cert is DigiCert High Assurance EV Root CA;
-     * Valid until: 10/Nov/2031
-     * 
-     * TODO: read this path from secret + with some chiper
-    */
+    // [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
+    // TODO: read this path from secret + with some chiper
     boost::system::error_code error;
     ssl_->load_verify_file(kVerifyFilePath, error);
     if (error) {
@@ -104,7 +94,7 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
                 rapidjson::Document json; 
                 json.Parse(body.data(), body.size());
                 const auto realmId = json["id"].GetUint64();
-                Console::Write("Realm id: [", realmId, "]\n");
+                Console::Write("realm id: [", realmId, "]\n");
                 if (callback) {
                     boost::asio::post(*service->context_, std::bind(callback, realmId));
                 }
@@ -117,14 +107,15 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     connection->Connect(std::move(onConnect));
 }
 
-void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuation) {
+void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::function<void()> continuation) {
     constexpr char * const kHost { "eu.api.blizzard.com" };
     constexpr char * const kService { "https" };
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
-    // TODO: remove token => use config!
+
     auto onConnect = [request = blizzard::RealmStatus(realmId, token_.Get()).Build()
+        , cmd = std::move(cmd)
         , service = this
         , callback = std::move(continuation)
         , connection = utils::WeakFrom<HttpConnection>(connection)
@@ -138,12 +129,14 @@ void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuati
 
         auto shared = connection.lock();
         shared->ScheduleWrite(std::move(request), [service
+            , cmd = std::move(cmd)
             , callback = std::move(callback)
             , connection
         ]() {
             assert(connection.use_count() == 1);
 
             auto OnReadSuccess = [service
+                , cmd = std::move(cmd)
                 , callback = std::move(callback)
                 , connection
             ]() mutable {
@@ -160,7 +153,12 @@ void Blizzard::QueryRealmStatus(size_t realmId, std::function<void()> continuati
                 const auto hasQueue = json["has_queue"].GetBool();
                 const std::string status = json["status"]["type"].GetString();
 
-                Console::Write(name, "(", status, "):", hasQueue? "\"has queue\"": "\"no queue\"\n");
+                auto message = "@" + cmd.initiator_ + ", " + name + "(" + status + "): " + (hasQueue? "has queue": "no queue");
+                command::RawCommand raw { "chat", { std::move(cmd.channel_), std::move(message) } };
+                if (!service->outbox_->TryPush(std::move(raw))) {
+                    Console::Write("fail to push realm-status response to queue: is full\n");
+                }
+               
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
                 }
@@ -242,7 +240,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
 void Blizzard::Invoker::Execute(command::RealmID) {
     auto initiateRealmQuery = [blizzard = blizzard_]() {
         blizzard->QueryRealm([](size_t realmId) {
-            Console::Write("ID acquired:", realmId, '\n');
+            Console::Write("acquire realm id:", realmId, '\n');
         });
     };
     if (!blizzard_->token_.IsValid()) {
@@ -253,12 +251,12 @@ void Blizzard::Invoker::Execute(command::RealmID) {
     }
 }
 
-void Blizzard::Invoker::Execute(command::RealmStatus) {
-    auto initiateQuery = [blizzard = blizzard_]() {
-        blizzard->QueryRealm([blizzard](size_t realmId) {
-            Console::Write("ID acquired: ", realmId, '\n');
-            blizzard->QueryRealmStatus(realmId, []() {
-                Console::Write("Realm confirmed!\n");
+void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
+    auto initiateQuery = [blizzard = blizzard_, cmd = std::move(cmd)]() {
+        blizzard->QueryRealm([blizzard, cmd = std::move(cmd)](size_t realmId) {
+            Console::Write("acquire realm id:", realmId, '\n');
+            blizzard->QueryRealmStatus(realmId, std::move(cmd), []() {
+                Console::Write("got realm status!\n");
             });
         });
     };
