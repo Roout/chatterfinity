@@ -26,7 +26,7 @@ Blizzard::Blizzard(const Config *config, Container * outbox)
     boost::system::error_code error;
     ssl_->load_verify_file(kVerifyFilePath, error);
     if (error) {
-        Console::Write("[ERROR]: ", error.message(), '\n');
+        Console::Write("[blizzard] [ERROR]:", error.message(), '\n');
     }
 }
 
@@ -94,7 +94,7 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
                 rapidjson::Document json; 
                 json.Parse(body.data(), body.size());
                 const auto realmId = json["id"].GetUint64();
-                Console::Write("realm id: [", realmId, "]\n");
+                Console::Write("[blizzard] realm id: [", realmId, "]\n");
                 if (callback) {
                     boost::asio::post(*service->context_, std::bind(callback, realmId));
                 }
@@ -156,7 +156,7 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
                 auto message = "@" + cmd.initiator_ + ", " + name + "(" + status + "): " + (hasQueue? "has queue": "no queue");
                 command::RawCommand raw { "chat", { std::move(cmd.channel_), std::move(message) } };
                 if (!service->outbox_->TryPush(std::move(raw))) {
-                    Console::Write("fail to push realm-status response to queue: is full\n");
+                    Console::Write("[blizzard] fail to push realm-status response to queue: is full\n");
                 }
                
                 if (callback) {
@@ -222,7 +222,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
                 assert(expires >= expectedDuration && "Unexpected duration. Blizzard API may be changed!");
                 assert(!strcmp(tokenType, "bearer") && "Unexpected token type. Blizzard API may be changed!");
 
-                Console::Write("Extracted token: [", token, "]\n");
+                Console::Write("[blizzard] extracted token: [", token, "]\n");
                 service->token_.Emplace(std::move(token), AccessToken::Duration(expires));
                 
                 if (callback) {
@@ -240,7 +240,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
 void Blizzard::Invoker::Execute(command::RealmID) {
     auto initiateRealmQuery = [blizzard = blizzard_]() {
         blizzard->QueryRealm([](size_t realmId) {
-            Console::Write("acquire realm id:", realmId, '\n');
+            Console::Write("[blizzard] acquire realm id:", realmId, '\n');
         });
     };
     if (!blizzard_->token_.IsValid()) {
@@ -254,9 +254,9 @@ void Blizzard::Invoker::Execute(command::RealmID) {
 void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
     auto initiateQuery = [blizzard = blizzard_, cmd = std::move(cmd)]() {
         blizzard->QueryRealm([blizzard, cmd = std::move(cmd)](size_t realmId) {
-            Console::Write("acquire realm id:", realmId, '\n');
+            Console::Write("[blizzard] acquire realm id:", realmId, '\n');
             blizzard->QueryRealmStatus(realmId, std::move(cmd), []() {
-                Console::Write("got realm status!\n");
+                Console::Write("[blizzard] got realm status!\n");
             });
         });
     };
@@ -270,7 +270,7 @@ void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
 
 void Blizzard::Invoker::Execute(command::AccessToken) {
     blizzard_->AcquireToken([]() {
-        Console::Write("Token acquired.\n");
+        Console::Write("[blizzard] token acquired.\n");
     });
 }
 
