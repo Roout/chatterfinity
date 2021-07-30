@@ -79,7 +79,7 @@ void Console::Run() {
         }
 
         if (auto handle = translator_.GetHandle(args.front()); handle) {
-            Write("call handle:", args.front(), '\n');
+            Write("[console] call handle for:", args.front(), '\n');
             // proccess command here
             std::invoke(*handle, Translator::Params{++args.begin(), args.end()});
         }
@@ -91,13 +91,13 @@ void Console::Run() {
             };
             if (!inbox_->TryPush(std::move(raw))) {
                 // abandon the command
-                Write("fail to proccess command: command storage is full\n");
+                Write("[console] fail to proccess command: command storage is full\n");
             }
         }
 
-        Write("  -> parsed: ["sv);
-        for(auto&&arg: args) Write(arg, ' ');
-        Write("]\n"sv);
+        std::string merged;
+        for (auto&&arg: args) merged += std::string(arg) + " "; 
+        Write("[console] parsed: [ ", merged, "]\n");
     }
 }
 
@@ -108,16 +108,17 @@ void Console::Invoker::Execute(command::Shutdown) {
 }
 
 void Console::Invoker::Execute(command::Help) {
-    Console::Write("available commands:\n"
-        "\t!shutdown - exit the application\n"
-        "\t!help - show existing commands\n"
-        "\t!blizzard-token - acquire token fromn blizzard\n"
-        "\t!realm-id - get id of the [flamegor] realm\n"
-        "\t!realm-status - get status of the [flamegor] realm\n"
-        "\t!login - login twitch\n"
-        "\t!join <channel> - join channel\n"
-        "\t!chat <channel> \"<message>\" - send a message to chat of the specified channel\n"
-        "\t!leave <channel> - leave joined channel\n"
+    Console::Write("[console] available commands:\n"
+        "  !shutdown - exit the application\n"
+        "  !help - show existing commands\n"
+        "  !blizzard-token - acquire token fromn blizzard\n"
+        "  !realm-id - get id of the [flamegor] realm\n"
+        "  !realm-status - get status of the [flamegor] realm\n"
+        "  !validate - validate token for twitch\n"
+        "  !login - login twitch\n"
+        "  !join <channel> - join channel\n"
+        "  !chat <channel> \"<message>\" - send a message to chat of the specified channel\n"
+        "  !leave <channel> - leave joined channel\n"
     );
 }
 
