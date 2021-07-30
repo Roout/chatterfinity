@@ -10,6 +10,8 @@
 #include <vector>
 #include <string_view>
 #include <cstdint>
+#include <array>
+#include <optional>
 
 namespace net {
 
@@ -65,6 +67,38 @@ namespace net {
         };
 
         Message ParseMessage(std::string_view src);
+
+        class IrcCommands final {
+        public:
+            enum CommandKind: size_t {
+                kPrivMsg,
+                kPing,
+                kCount
+            };
+
+            constexpr IrcCommands() 
+                : commands_ { "PRIVMSG", "PING" }
+            {}
+
+            constexpr std::string_view Get(CommandKind kind) const noexcept {
+                return commands_[kind];
+            }
+
+            constexpr std::optional<CommandKind> Get(
+                    std::string_view cmd) const noexcept 
+            {
+                for (size_t i = 0; i < kCount; i++) {
+                    if (commands_[i] == cmd) {
+                        return { CommandKind{ i } };
+                    }
+                }
+                return std::nullopt;
+            }
+
+        private:
+            const std::array<std::string_view, kCount> commands_;
+        };
+
     }
 
 } // namespace net
