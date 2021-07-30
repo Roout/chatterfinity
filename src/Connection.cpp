@@ -31,14 +31,14 @@ Connection::Connection(SharedIOContext context
 
 Connection::~Connection() { 
     Close();
-    log_->Write(LogType::info, "destroyed\n"); 
+    log_->Write(LogType::kInfo, "destroyed\n"); 
 }
 
 void Connection::Close() {
     boost::system::error_code error;
     timer_.cancel(error);
     if (error) {
-        log_->Write(LogType::error, "timer cancel:", error.message(), '\n');
+        log_->Write(LogType::kError, "timer cancel:", error.message(), '\n');
         error.clear();
     }
 
@@ -48,18 +48,18 @@ void Connection::Close() {
 
     socket_->shutdown(error);
     if (error) {
-        log_->Write(LogType::error, "SSL stream shutdown:", error.message(), '\n');
+        log_->Write(LogType::kError, "SSL stream shutdown:", error.message(), '\n');
         error.clear();
     }
     if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
         ll.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
         if (error) {
-            log_->Write(LogType::error, "SSL underlying socket shutdown:", error.message(), '\n');
+            log_->Write(LogType::kError, "SSL underlying socket shutdown:", error.message(), '\n');
             error.clear();
         }
         ll.close(error);
         if (error) {
-            log_->Write(LogType::error, "SSL underlying socket close:", error.message(), '\n');
+            log_->Write(LogType::kError, "SSL underlying socket close:", error.message(), '\n');
         }
     } 
 }
@@ -92,7 +92,7 @@ void Connection::OnResolve(const boost::system::error_code& error
     , tcp::resolver::results_type results
 ) {
     if (error) {
-        log_->Write(LogType::error, "OnResolve:", error.message(), '\n');
+        log_->Write(LogType::kError, "OnResolve:", error.message(), '\n');
         if (error != boost::asio::error::operation_aborted) {
             Reconnect();
         }
@@ -115,13 +115,13 @@ void Connection::OnConnect(const boost::system::error_code& error
     , const boost::asio::ip::tcp::endpoint& endpoint
 ) {
     if (error) {
-        log_->Write(LogType::error, "OnConnect:", error.message(), "\n");
+        log_->Write(LogType::kError, "OnConnect:", error.message(), "\n");
         if (error != boost::asio::error::operation_aborted) {
             Reconnect();
         }
     } 
     else {
-        log_->Write(LogType::info, "connected. Local port:", endpoint, '\n');
+        log_->Write(LogType::kInfo, "connected. Local port:", endpoint, '\n');
         socket_->async_handshake(boost::asio::ssl::stream_base::client
             , boost::asio::bind_executor(strand_
                 , std::bind(&Connection::OnHandshake
@@ -135,13 +135,13 @@ void Connection::OnConnect(const boost::system::error_code& error
 
 void Connection::OnHandshake(const boost::system::error_code& error) {
     if (error) {
-        log_->Write(LogType::error, "OnHandshake:", error.message(), "\n");
+        log_->Write(LogType::kError, "OnHandshake:", error.message(), "\n");
         if (error != boost::asio::error::operation_aborted) {
             Reconnect();
         }
     }
     else {
-        log_->Write(LogType::info, "handshake successeded.\n");
+        log_->Write(LogType::kInfo, "handshake successeded.\n");
         reconnects_ = 0;
         if (onConnectSuccess_) {
             std::invoke(onConnectSuccess_);
@@ -161,7 +161,7 @@ void Connection::Reconnect() {
             std::bind(&Connection::OnTimeout, shared_from_this(), std::placeholders::_1)
         )
     );
-    log_->Write(LogType::info, "reconnecting after", timeout, "seconds ...\n");
+    log_->Write(LogType::kInfo, "reconnecting after", timeout, "seconds ...\n");
 }
 
 void Connection::ScheduleWrite(std::string text, std::function<void()> onWrite) {
@@ -198,7 +198,7 @@ void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
     isWriting_ = false;
 
     if (error) {
-        log_->Write(LogType::error, "OnWrite:", error.message(), '\n');
+        log_->Write(LogType::kError, "OnWrite:", error.message(), '\n');
         assert(socket_);
         if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
             // prevent reconnection after shutdown
@@ -206,10 +206,10 @@ void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
         }
     }
     else {
-        log_->Write(LogType::info, "sent:", bytes, "bytes\n");
+        log_->Write(LogType::kInfo, "sent:", bytes, "bytes\n");
         if (outbox_.GetQueueSize()) {
             // there are a few messages scheduled to be sent
-            log_->Write(LogType::info, "queued messages:", outbox_.GetQueueSize(), "\n");
+            log_->Write(LogType::kInfo, "queued messages:", outbox_.GetQueueSize(), "\n");
             Write();
         }
         if (onWriteSuccess_) {
@@ -221,18 +221,18 @@ void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
 void Connection::OnTimeout(const boost::system::error_code& error) {
     if (error == boost::asio::error::operation_aborted) {
         // is being closed while waiting
-        log_->Write(LogType::info, "OnTimeout:", error.message(), '\n');
+        log_->Write(LogType::kInfo, "OnTimeout:", error.message(), '\n');
     }
     else if (error) {
-        log_->Write(LogType::error, "OnTimeout:", error.message(), '\n');
+        log_->Write(LogType::kError, "OnTimeout:", error.message(), '\n');
         Close();
     }
     else if (reconnects_ > kReconnectLimit) {
-        log_->Write(LogType::warning, "OnTimeout: reach reconnection limit\n");
+        log_->Write(LogType::kWarning, "OnTimeout: reach reconnection limit\n");
         Close();
     }
     else {
-        log_->Write(LogType::info, "OnTimeout: start connection\n");
+        log_->Write(LogType::kInfo, "OnTimeout: start connection\n");
         // don't provide callback so that it won't overwrite existing OnConnectSuccess_ callback
         Connect();
     }
@@ -263,7 +263,7 @@ void HttpConnection::ReadHeader() {
 
 void HttpConnection::OnHeaderRead(const boost::system::error_code& error, size_t bytes) {
     if (error) {
-        log_->Write(LogType::error, "OnHeaderRead", error.message(), "\n");
+        log_->Write(LogType::kError, "OnHeaderRead", error.message(), "\n");
         assert(socket_);
         if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
             // prevent reconnection after shutdown
@@ -271,7 +271,7 @@ void HttpConnection::OnHeaderRead(const boost::system::error_code& error, size_t
         }
     } 
     else {
-        log_->Write(LogType::info, "OnHeaderRead read", bytes, "bytes.\n");
+        log_->Write(LogType::kInfo, "OnHeaderRead read", bytes, "bytes.\n");
         { // extract header
             const auto data { inbox_.data() };
             const std::string header {
@@ -283,21 +283,21 @@ void HttpConnection::OnHeaderRead(const boost::system::error_code& error, size_t
         }
         // TODO: Handle status code!
         // print status line
-        log_->Write(LogType::info
+        log_->Write(LogType::kInfo
             , header_.httpVersion_
             , header_.statusCode_
             , header_.reasonPhrase_, '\n'
         );
-        assert(header_.bodyKind_ != net::http::BodyContentKind::unknown);
+        assert(header_.bodyKind_ != net::http::BodyContentKind::kUnknown);
         
         using net::http::BodyContentKind;
         switch (header_.bodyKind_) {
-            case BodyContentKind::chunkedTransferEncoded: {
+            case BodyContentKind::kChunkedTransferEncoded: {
                 body_.clear();
                 chunk_.Reset();
                 ReadChunkedBody(); 
             } break;
-            case BodyContentKind::contentLengthSpecified: {
+            case BodyContentKind::kContentLengthSpecified: {
                 if (inbox_.size()) {
                     body_.assign(
                         boost::asio::buffers_begin(inbox_.data()), 
@@ -307,7 +307,7 @@ void HttpConnection::OnHeaderRead(const boost::system::error_code& error, size_t
                 }
                 ReadIntactBody(); 
             } break;
-            case BodyContentKind::unknown: [[fallthrough]];
+            case BodyContentKind::kUnknown: [[fallthrough]];
             default: 
                 throw std::runtime_error("Problem with header parsing occured");
         }
@@ -315,7 +315,7 @@ void HttpConnection::OnHeaderRead(const boost::system::error_code& error, size_t
 }
 
 void HttpConnection::ReadIntactBody() {
-    assert(header_.bodyKind_ == net::http::BodyContentKind::contentLengthSpecified);
+    assert(header_.bodyKind_ == net::http::BodyContentKind::kContentLengthSpecified);
     static constexpr size_t kChunkSize = 1024;
     // size of the content I need to parse from the HTTP response
     const auto bodyExpectedSize = static_cast<size_t>(header_.bodyLength_);
@@ -338,7 +338,7 @@ void HttpConnection::ReadIntactBody() {
     }
     else {
         // NOTIFY that we have read body sucessfully
-        log_->Write(LogType::info, "ReadIntactBody:", body_, '\n');
+        log_->Write(LogType::kInfo, "ReadIntactBody:", body_, '\n');
         if (onReadSuccess_) {
             std::invoke(onReadSuccess_);
         }
@@ -347,7 +347,7 @@ void HttpConnection::ReadIntactBody() {
 
 void HttpConnection::OnReadIntactBody(const boost::system::error_code& error, size_t bytes) {
     if (error) {
-        log_->Write(LogType::error, "OnReadIntactBody:", error.message(), "\n");
+        log_->Write(LogType::kError, "OnReadIntactBody:", error.message(), "\n");
         assert(socket_);
         if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
             // prevent reconnection after shutdown
@@ -355,7 +355,7 @@ void HttpConnection::OnReadIntactBody(const boost::system::error_code& error, si
         }
     }
     else {
-        log_->Write(LogType::info, "OnReadIntactBody read", bytes, "bytes.\n");
+        log_->Write(LogType::kInfo, "OnReadIntactBody read", bytes, "bytes.\n");
     
         auto data = inbox_.data();
         std::string chunk {
@@ -370,7 +370,7 @@ void HttpConnection::OnReadIntactBody(const boost::system::error_code& error, si
 }
 
 void HttpConnection::ReadChunkedBody() {
-    assert(header_.bodyKind_ == net::http::BodyContentKind::chunkedTransferEncoded);
+    assert(header_.bodyKind_ == net::http::BodyContentKind::kChunkedTransferEncoded);
 
     boost::asio::async_read_until(*socket_
         , inbox_
@@ -387,7 +387,7 @@ void HttpConnection::ReadChunkedBody() {
 
 void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, size_t bytes) {
     if (error) {
-        log_->Write(LogType::error, "OnReadChunkedBody:", error.message(), "\n");
+        log_->Write(LogType::kError, "OnReadChunkedBody:", error.message(), "\n");
         assert(socket_);
         if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
             // prevent reconnection after shutdown
@@ -396,7 +396,7 @@ void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, s
         return;
     } 
 
-    log_->Write(LogType::info, "OnReadChunkedBody read", bytes, "bytes.\n");
+    log_->Write(LogType::kInfo, "OnReadChunkedBody read", bytes, "bytes.\n");
     const auto data = inbox_.data();
     std::string chunk {
         boost::asio::buffers_begin(data), 
@@ -405,12 +405,12 @@ void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, s
     inbox_.consume(bytes);
     if (chunk_.consumed_ & 1) { 
         // chunk content
-        log_->Write(LogType::info, "chunk:", chunk_.consumed_ / 2, ":", chunk, '\n');
+        log_->Write(LogType::kInfo, "chunk:", chunk_.consumed_ / 2, ":", chunk, '\n');
         chunk_.consumed_++;
         if (!chunk_.size_) {
             // This is the last part of 0 chunk so notify about that subscribers
             // Body has been already read
-            log_->Write(LogType::info, "read body:\n", body_, '\n');
+            log_->Write(LogType::kInfo, "read body:\n", body_, '\n');
             if (onReadSuccess_) {
                 std::invoke(onReadSuccess_);
             }
@@ -422,7 +422,7 @@ void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, s
         // chunk size
         chunk_.size_ = utils::ExtractInteger(chunk, 16);
         chunk_.consumed_++;
-        log_->Write(LogType::info, "chunk:", chunk_.consumed_ / 2, "of size", chunk_.size_, '\n');
+        log_->Write(LogType::kInfo, "chunk:", chunk_.consumed_ / 2, "of size", chunk_.size_, '\n');
     }
     // read next line
     ReadChunkedBody();
@@ -447,7 +447,7 @@ void IrcConnection::Read(std::function<void()> onSuccess) {
 
 void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes) {
     if (error) {
-        log_->Write(LogType::error, "OnRead:", error.message(), "\n");
+        log_->Write(LogType::kError, "OnRead:", error.message(), "\n");
         assert(socket_);
         if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
             // prevent reconnection after shutdown
@@ -455,7 +455,7 @@ void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes)
         }
     } 
     else {
-        log_->Write(LogType::info, "OnRead read", bytes, "bytes.\n");
+        log_->Write(LogType::kInfo, "OnRead read", bytes, "bytes.\n");
 
         const auto data { inbox_.data() };
         std::string buffer {
@@ -463,7 +463,7 @@ void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes)
             boost::asio::buffers_begin(data) + bytes - kCRLF.size()
         };        
         inbox_.consume(bytes);
-        log_->Write(LogType::info, "->", buffer, '\n');
+        log_->Write(LogType::kInfo, "->", buffer, '\n');
         message_ = net::irc::ParseMessage(std::string_view { buffer.data(), buffer.size() } );
 
         if (onReadSuccess_) {

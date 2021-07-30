@@ -40,7 +40,7 @@ Header ParseHeader(std::string_view src) {
     result.statusCode_ = static_cast<uint16_t>(utils::ExtractInteger(statusParts[1]));
     result.reasonPhrase_ = statusParts[2];
     // default values:
-    result.bodyKind_ = BodyContentKind::unknown;
+    result.bodyKind_ = BodyContentKind::kUnknown;
     result.bodyLength_ = std::string_view::npos;
     // extract FIELDS
     for (size_t start = statusEnd, finish = src.find_first_of(kFieldDelimiter.data(), statusEnd); 
@@ -56,13 +56,13 @@ Header ParseHeader(std::string_view src) {
         raw = utils::Trim(raw, " ");
 
         if (utils::IsEqual(key, Header::kContentLengthKey)) {
-            result.bodyKind_ = BodyContentKind::contentLengthSpecified;
+            result.bodyKind_ = BodyContentKind::kContentLengthSpecified;
             result.bodyLength_ = utils::ExtractInteger(raw);
         }
         else if (utils::IsEqual(key, Header::kTransferEncodedKey) 
             && utils::IsEqual(raw, Header::kTransferEncodedValue)         
         ) {
-            result.bodyKind_ = BodyContentKind::chunkedTransferEncoded;
+            result.bodyKind_ = BodyContentKind::kChunkedTransferEncoded;
             result.bodyLength_ = std::string_view::npos;
         }
 

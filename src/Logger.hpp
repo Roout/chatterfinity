@@ -5,9 +5,9 @@
 #include <mutex>
 
 enum class LogType {
-    error,
-    warning,
-    info
+    kError,
+    kWarning,
+    kInfo
 };
 
 // The most simple logging mechanism
@@ -36,13 +36,13 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         os_ << ms.count() << ' ';
         switch (type) {
-            case LogType::info: {
+            case LogType::kInfo: {
                 os_ << "--info: ";
             } break;
-            case LogType::error: {
+            case LogType::kError: {
                 os_ << "--error: ";
             } break;
-            case LogType::warning: {
+            case LogType::kWarning: {
                 os_ << "--warning: ";
             } break;
             default: break;

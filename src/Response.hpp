@@ -18,9 +18,9 @@ namespace net {
     namespace http {
 
         enum class BodyContentKind : std::uint16_t {
-            chunkedTransferEncoded,
-            contentLengthSpecified,
-            unknown // may be Multiple-resource bodies
+            kChunkedTransferEncoded,
+            kContentLengthSpecified,
+            kUnknown // may be Multiple-resource bodies
         };
         
         struct Header {    
