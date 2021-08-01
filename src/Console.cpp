@@ -1,6 +1,11 @@
 #include "Console.hpp"
 #include "Utility.hpp"
 
+#include <cassert>
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 namespace service {
 
 Console::Console(Container * inbox) 
@@ -23,6 +28,72 @@ Console::~Console() {
     Write("  -> close console service\n");
 }
 
+#ifdef _WIN32
+
+namespace {
+
+void PrintError() {
+    LPTSTR buffer = nullptr;
+    if (!FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 
+        nullptr, GetLastError(), LOCALE_USER_DEFAULT, buffer, 0, nullptr)
+    ) {
+        Console::Write("[ERROR]: FormatMessage call failed\n");
+    }
+    else {
+        Console::Write("[ERROR]: ", buffer, "\n");
+    }
+    LocalFree(buffer);
+}
+
+} // namespace {
+
+std::string Console::ReadLine() {
+    void *handle = GetStdHandle(STD_INPUT_HANDLE);
+    if (handle == INVALID_HANDLE_VALUE) {
+        PrintError();
+        return {};
+    }
+
+    constexpr size_t kMaxChars = 255;
+    // should have 3 bytes at most for one character
+    constexpr size_t kMaxBytes = kMaxChars * 3 + 1;
+    
+    wchar_t wides[kMaxChars];
+    char alias[kMaxBytes];
+    // number of characters will be read
+    unsigned long read = 0; 
+    
+    std::unique_lock<std::mutex> guard { in_ };
+    const auto code = ReadConsoleW(handle, wides, kMaxChars, &read, nullptr);
+    guard.unlock();
+    if (!code) {
+        PrintError();
+        return {};
+    }
+
+    // remove CRLF delimiter from the string
+    assert(read >= 2 && "Assume, that delimiter is CRLF");
+    read -= 2;
+    wides[read] = L'\0';
+
+    if (auto size = WideCharToMultiByte(CP_UTF8, 0, wides, read
+        , alias, kMaxBytes, nullptr, nullptr); size > 0) 
+    { // success
+        alias[size] = '\0';
+        return { alias, static_cast<size_t>(size) };
+    }
+    else {
+        PrintError();
+        return {};
+    }
+}
+
+void Console::ReadLine(std::string& buffer) {
+    buffer = ReadLine();
+}
+
+#elif (__unix__ || __linux__)
+
 std::string Console::ReadLine() {
     std::string buffer;
     std::lock_guard<std::mutex> lock { in_ };
@@ -34,6 +105,8 @@ void Console::ReadLine(std::string& buffer) {
     std::lock_guard<std::mutex> lock { in_ };
     std::getline(std::cin, buffer);
 }
+
+#endif
 
 // blocks execution thread
 void Console::Run() {
