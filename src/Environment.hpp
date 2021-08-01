@@ -45,6 +45,7 @@ namespace service {
 
 namespace cst {
 
+constexpr std::size_t kMaxIrcMessageSize { 500 };
 constexpr std::size_t kQueueCapacity { 255 };
 inline constexpr service::Couple kServiceCouple {};
 

@@ -1,5 +1,6 @@
 #include "Console.hpp"
 #include "Utility.hpp"
+#include "Environment.hpp"
 
 #include <cassert>
 #ifdef _WIN32
@@ -60,16 +61,20 @@ std::string Console::ReadLine() {
         return {};
     }
 
-    constexpr size_t kMaxChars = 255;
+    constexpr size_t kMaxChars = cst::kMaxIrcMessageSize;
     // should have 3 bytes at most for one character
     constexpr size_t kMaxBytes = kMaxChars * 3 + 1;
     
-    wchar_t wides[kMaxChars];
+    // The number of characters to be read. 
+    // The size of the buffer pointed to by the lpBuffer parameter 
+    // should be at least nNumberOfCharsToRead * sizeof(TCHAR) bytes.
+    wchar_t wides[kMaxChars * sizeof(wchar_t)];
     char alias[kMaxBytes];
     // number of characters will be read
     unsigned long read = 0; 
     
     std::unique_lock<std::mutex> guard { in_ };
+    // TODO: add mechanism to catch the case when user entered more than `kMaxChars` characters
     const auto code = ReadConsoleW(handle, wides, kMaxChars, &read, nullptr);
     guard.unlock();
     if (!code) {
