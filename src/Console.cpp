@@ -33,14 +33,18 @@ Console::~Console() {
 namespace {
 
 void PrintError() {
+    const DWORD id = ::GetLastError();
     LPTSTR buffer = nullptr;
-    if (!FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 
-        nullptr, GetLastError(), LOCALE_USER_DEFAULT, buffer, 0, nullptr)
-    ) {
-        Console::Write("[ERROR]: FormatMessage call failed\n");
+    const auto kMask { FORMAT_MESSAGE_ALLOCATE_BUFFER 
+        | FORMAT_MESSAGE_FROM_SYSTEM 
+        | FORMAT_MESSAGE_IGNORE_INSERTS };
+    if (!FormatMessage(kMask, nullptr, id, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), 
+        (LPTSTR)&buffer, 0, nullptr)) 
+    {
+        Console::Write("[console]: [error] FormatMessage call failed for error", id, "\n");
     }
     else {
-        Console::Write("[ERROR]: ", buffer, "\n");
+        Console::Write("[console]: [error] ", buffer, "\n");
     }
     LocalFree(buffer);
 }
