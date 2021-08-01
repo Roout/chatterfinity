@@ -8,6 +8,86 @@
 
 #include "rapidjson/document.h"
 
+namespace {
+
+struct RealmStatusWrapper final {
+    std::string name;
+    std::string queue;
+    std::string status;
+
+    bool Parse(const std::string& buffer) {
+        rapidjson::Document json; 
+        json.Parse(buffer.data(), buffer.size());
+        if (!json.HasMember("realms")) return false;
+        const auto realms = json["realms"].GetArray();
+        assert(!realms.Empty() && "Empty realms");
+
+        // TODO: don't take just first value
+        const auto& front = *realms.Begin();
+        if (!front.HasMember("name")) return false;
+        name = front["name"].GetString();
+
+        if (!json.HasMember("has_queue")) return false;
+        const auto hasQueue = json["has_queue"].GetBool();
+        queue = hasQueue? "has queue": "no queue";
+
+        if (!json.HasMember("status") || !json["status"].HasMember("type")) return false;
+        status = json["status"]["type"].GetString();
+
+        return true;
+    }
+
+};
+
+std::string to_string(const RealmStatusWrapper& realm) {
+    return realm.name + "(" + realm.status + "): " + realm.queue;
+}
+
+
+struct TokenWrapper final {
+    std::string content;
+    std::string type;
+    std::uint64_t expires;
+
+    bool Parse(const std::string& buffer) {
+        rapidjson::Document json; 
+        json.Parse(buffer.data(), buffer.size());
+
+        if (auto it = json.FindMember("access_token"); it != json.MemberEnd()) {
+            content = it->value.GetString();
+        }
+        else {
+            return false;
+        }
+
+        if (auto it = json.FindMember("token_type"); it != json.MemberEnd()) {
+            type = it->value.GetString();
+        }
+        else {
+            return false;
+        }
+
+        if (auto it = json.FindMember("expires_in"); it != json.MemberEnd()) {
+            expires = it->value.GetUint64();
+        }
+        else {
+            return false;
+        }
+
+        assert(type == "bearer" 
+            && "Unexpected token type. Blizzard API may be changed!");
+
+        return true;
+    }
+
+};
+
+std::string to_string(const TokenWrapper& token) {
+    return token.content;
+}
+
+} // namespace {
+
 namespace service {
 
 Blizzard::Blizzard(const Config *config, Container * outbox) 
@@ -107,43 +187,6 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     connection->Connect(std::move(onConnect));
 }
 
-namespace {
-
-struct RealmStatusWrapper final {
-    std::string name;
-    std::string queue;
-    std::string status;
-
-    bool Parse(const std::string& buffer) {
-        rapidjson::Document json; 
-        json.Parse(buffer.data(), buffer.size());
-        if (!json.HasMember("realms")) return false;
-        const auto realms = json["realms"].GetArray();
-        assert(!realms.Empty() && "Empty realms");
-
-        // TODO: don't take just first value
-        const auto& front = *realms.Begin();
-        if (!front.HasMember("name")) return false;
-        name = front["name"].GetString();
-
-        if (!json.HasMember("has_queue")) return false;
-        const auto hasQueue = json["has_queue"].GetBool();
-        queue = hasQueue? "has queue": "no queue";
-
-        if (!json.HasMember("status") || !json["status"].HasMember("type")) return false;
-        status = json["status"]["type"].GetString();
-
-        return true;
-    }
-
-};
-
-std::string to_string(const RealmStatusWrapper& realm) {
-    return realm.name + "(" + realm.status + "): " + realm.queue;
-}
-
-} // namespace {
-
 void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::function<void()> continuation) {
     constexpr char * const kHost { "eu.api.blizzard.com" };
     constexpr char * const kService { "https" };
@@ -215,52 +258,6 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
     };
     connection->Connect(std::move(onConnect));
 }
-
-namespace {
-
-struct TokenWrapper final {
-    std::string content;
-    std::string type;
-    std::uint64_t expires;
-
-    bool Parse(const std::string& buffer) {
-        rapidjson::Document json; 
-        json.Parse(buffer.data(), buffer.size());
-
-        if (auto it = json.FindMember("access_token"); it != json.MemberEnd()) {
-            content = it->value.GetString();
-        }
-        else {
-            return false;
-        }
-
-        if (auto it = json.FindMember("token_type"); it != json.MemberEnd()) {
-            type = it->value.GetString();
-        }
-        else {
-            return false;
-        }
-
-        if (auto it = json.FindMember("expires_in"); it != json.MemberEnd()) {
-            expires = it->value.GetUint64();
-        }
-        else {
-            return false;
-        }
-
-        assert(type == "bearer" 
-            && "Unexpected token type. Blizzard API may be changed!");
-
-        return true;
-    }
-
-};
-
-std::string to_string(const TokenWrapper& token) {
-    return token.content;
-}
-
-} // namespace {
 
 void Blizzard::AcquireToken(std::function<void()> continuation) {
     constexpr char * const kHost { "eu.battle.net" };

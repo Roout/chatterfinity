@@ -6,6 +6,29 @@
 #include <Windows.h>
 #endif
 
+#ifdef _WIN32
+namespace {
+
+void PrintError() {
+    const DWORD id = ::GetLastError();
+    LPTSTR buffer = nullptr;
+    const auto kMask { FORMAT_MESSAGE_ALLOCATE_BUFFER 
+        | FORMAT_MESSAGE_FROM_SYSTEM 
+        | FORMAT_MESSAGE_IGNORE_INSERTS };
+    if (!FormatMessage(kMask, nullptr, id, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), 
+        (LPTSTR)&buffer, 0, nullptr)) 
+    {
+        service::Console::Write("[console]: [error] FormatMessage call failed for error", id, "\n");
+    }
+    else {
+        service::Console::Write("[console]: [error] ", buffer, "\n");
+    }
+    LocalFree(buffer);
+}
+
+} // namespace {
+#endif
+
 namespace service {
 
 Console::Console(Container * inbox) 
@@ -29,27 +52,6 @@ Console::~Console() {
 }
 
 #ifdef _WIN32
-
-namespace {
-
-void PrintError() {
-    const DWORD id = ::GetLastError();
-    LPTSTR buffer = nullptr;
-    const auto kMask { FORMAT_MESSAGE_ALLOCATE_BUFFER 
-        | FORMAT_MESSAGE_FROM_SYSTEM 
-        | FORMAT_MESSAGE_IGNORE_INSERTS };
-    if (!FormatMessage(kMask, nullptr, id, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), 
-        (LPTSTR)&buffer, 0, nullptr)) 
-    {
-        Console::Write("[console]: [error] FormatMessage call failed for error", id, "\n");
-    }
-    else {
-        Console::Write("[console]: [error] ", buffer, "\n");
-    }
-    LocalFree(buffer);
-}
-
-} // namespace {
 
 std::string Console::ReadLine() {
     void *handle = GetStdHandle(STD_INPUT_HANDLE);
