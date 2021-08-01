@@ -333,6 +333,19 @@ void Blizzard::Invoker::Execute(command::RealmID) {
     }
 }
 
+void Blizzard::Invoker::Execute(command::Arena arena) {
+    auto arenaQuery = [blizzard = blizzard_, cmd = std::move(arena)]() {
+        Console::Write("[blizzard] arena: [ initiator =",
+             cmd.initiator_, ", channel =", cmd.channel_, "]\n");
+    };
+    if (!blizzard_->token_.IsValid()) {
+        blizzard_->AcquireToken(std::move(arenaQuery));
+    }
+    else {
+        std::invoke(arenaQuery);
+    }
+}
+
 void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
     auto initiateQuery = [blizzard = blizzard_, cmd = std::move(cmd)]() {
         blizzard->QueryRealm([blizzard, cmd = std::move(cmd)](size_t realmId) {

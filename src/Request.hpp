@@ -188,8 +188,25 @@ namespace blizzard {
         std::string token_;
     };
 
+
     // 3. Creature Families { wolf, ... }
     // 4. Creature Types { Beast, Giant, ... }
     // 5. Arena
+    class Arena : public Query {
+    public:
+
+        Arena(std::uint64_t season, std::uint64_t teamSize, const std::string& token)
+            : season_ { season }
+            , teamSize_ { teamSize }
+            , token_ { token }
+        {}
+
+        std::string Build() const override;
+
+    private:
+        std::uint64_t season_;
+        std::uint64_t teamSize_;
+        std::string token_;
+    };
     // 6. Auction
 }

@@ -9,6 +9,24 @@
 
 #include <algorithm>
 
+namespace {
+    std::string ExtractBetween(const std::string& src, char left, char right) {
+        const auto leftDelim = src.find(left);
+        const auto rightDelim = src.find(right, leftDelim);
+        if (leftDelim == std::string::npos || rightDelim == std::string::npos) {
+            return {};
+        } 
+        else {
+            return { src.substr(leftDelim + 1, rightDelim - leftDelim - 1) };
+        }
+    }
+
+    inline std::string_view ShiftView(const std::string& src, size_t shift) noexcept {
+        assert(shift < src.size());
+        return { src.data() + shift, src.size() - shift};
+    }
+}
+
 namespace service {
 
 Twitch::Twitch(const Config *config, Container * outbox) 
@@ -37,6 +55,7 @@ Twitch::Twitch(const Config *config, Container * outbox)
     std::initializer_list<Translator::Pair> list {
         { "help"sv,         Translator::CreateHandle<command::Help>(*this) },
         { "ping"sv,         Translator::CreateHandle<command::Pong>(*this) },
+        { "arena"sv,        Translator::CreateHandle<command::Arena>(*this) },
         { "realm-status"sv, Translator::CreateHandle<command::RealmStatus>(*this) }
     };
     translator_.Insert(list);
@@ -71,24 +90,6 @@ void Twitch::Run() {
                 }
             }
         });
-    }
-}
-
-namespace {
-    std::string ExtractBetween(const std::string& src, char left, char right) {
-        const auto leftDelim = src.find(left);
-        const auto rightDelim = src.find(right, leftDelim);
-        if (leftDelim == std::string::npos || rightDelim == std::string::npos) {
-            return {};
-        } 
-        else {
-            return { src.substr(leftDelim + 1, rightDelim - leftDelim - 1) };
-        }
-    }
-
-    inline std::string_view ShiftView(const std::string& src, size_t shift) noexcept {
-        assert(shift < src.size());
-        return { src.data() + shift, src.size() - shift};
     }
 }
 
@@ -291,7 +292,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
         , id
     );
 
-    auto onConnect = [request =twitch::IrcAuth{cmd.token_, cmd.user_}.Build()
+    auto onConnect = [request = twitch::IrcAuth{cmd.token_, cmd.user_}.Build()
         , twitchService = twitch_
         , irc = twitch_->irc_.get()
     ]() {
@@ -315,6 +316,20 @@ void Twitch::Invoker::Execute(command::RealmStatus cmd) {
     }
     else {
         Console::Write("[twitch] failed to push `RealmStatus` to queue is full\n");
+    }
+}
+
+void Twitch::Invoker::Execute(command::Arena cmd) {
+    assert(twitch_ && "Cannot be null");
+    assert(twitch_->irc_ && "Cannot be null");
+
+    Console::Write("[twitch] execute arena command:", cmd.channel_, cmd.initiator_, '\n');
+    command::RawCommand raw { "arena", { std::move(cmd.channel_), std::move(cmd.initiator_) }};
+    if (twitch_->outbox_->TryPush(std::move(raw))) {
+        Console::Write("[twitch] push `Arena` to queue\n");
+    }
+    else {
+        Console::Write("[twitch] failed to push `Arena` to queue is full\n");
     }
 }
 

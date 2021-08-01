@@ -86,6 +86,7 @@ public:
     void Execute(command::RealmID);
     void Execute(command::RealmStatus);
     void Execute(command::AccessToken);
+    void Execute(command::Arena);
 
 private:
     Blizzard * const blizzard_ { nullptr };

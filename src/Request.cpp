@@ -173,4 +173,23 @@ std::string RealmStatus::Build() const {
     ).str();
 }
 
+std::string Arena::Build() const {
+    assert(teamSize_ == 2 || teamSize_ == 3 || teamSize_ == 5);
+
+    const char *requestTemplate = 
+            "GET /data/wow/pvp-season/%1%/pvp-leaderboard/%2%v%2%?namespace=%3%&locale=%4% HTTP/1.1\r\n"
+            "Host: %5%.api.blizzard.com\r\n"
+            "Authorization: Bearer %6%\r\n"
+            "\r\n";
+    
+    return (boost::format(requestTemplate) 
+        % season_
+        % teamSize_
+        % kNamespace
+        % kLocale
+        % kRegion
+        % token_
+    ).str();
+}
+
 }
