@@ -109,7 +109,7 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
 
 namespace {
 
-struct RealmStatus final {
+struct RealmStatusWrapper final {
     std::string name;
     std::string queue;
     std::string status;
@@ -138,7 +138,7 @@ struct RealmStatus final {
 
 };
 
-std::string to_string(const RealmStatus& realm) {
+std::string to_string(const RealmStatusWrapper& realm) {
     return realm.name + "(" + realm.status + "): " + realm.queue;
 }
 
@@ -182,7 +182,7 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
                 auto shared = connection.lock();
                 const auto [head, body] = shared->AcquireResponse();
 
-                RealmStatus realm;
+                RealmStatusWrapper realm;
                 std::string message {""};
                 if (!realm.Parse(body)) {
                     message = "sorry, can't provide the answer. Try later please!";
@@ -215,6 +215,52 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
     };
     connection->Connect(std::move(onConnect));
 }
+
+namespace {
+
+struct TokenWrapper final {
+    std::string content;
+    std::string type;
+    std::uint64_t expires;
+
+    bool Parse(const std::string& buffer) {
+        rapidjson::Document json; 
+        json.Parse(buffer.data(), buffer.size());
+
+        if (auto it = json.FindMember("access_token"); it != json.MemberEnd()) {
+            content = it->value.GetString();
+        }
+        else {
+            return false;
+        }
+
+        if (auto it = json.FindMember("token_type"); it != json.MemberEnd()) {
+            type = it->value.GetString();
+        }
+        else {
+            return false;
+        }
+
+        if (auto it = json.FindMember("expires_in"); it != json.MemberEnd()) {
+            expires = it->value.GetUint64();
+        }
+        else {
+            return false;
+        }
+
+        assert(type == "bearer" 
+            && "Unexpected token type. Blizzard API may be changed!");
+
+        return true;
+    }
+
+};
+
+std::string to_string(const TokenWrapper& token) {
+    return token.content;
+}
+
+} // namespace {
 
 void Blizzard::AcquireToken(std::function<void()> continuation) {
     constexpr char * const kHost { "eu.battle.net" };
@@ -257,18 +303,12 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
 
                 auto shared = connection.lock();
                 const auto [head, body] = shared->AcquireResponse();
-                rapidjson::Document json; 
-                json.Parse(body.data(), body.size());
-                std::string token = json["access_token"].GetString();
-                const auto tokenType = json["token_type"].GetString();
-                const auto expires = json["expires_in"].GetUint64();
+                
+                TokenWrapper token;
+                token.Parse(body);
 
-                [[maybe_unused]] constexpr auto expectedDuration = 24 * 60 * 60 - 1;
-                assert(expires >= expectedDuration && "Unexpected duration. Blizzard API may be changed!");
-                assert(!strcmp(tokenType, "bearer") && "Unexpected token type. Blizzard API may be changed!");
-
-                Console::Write("[blizzard] extracted token: [", token, "]\n");
-                service->token_.Emplace(std::move(token), AccessToken::Duration(expires));
+                Console::Write("[blizzard] extracted token: [", to_string(token), "]\n");
+                service->token_.Emplace(std::move(token.content), AccessToken::Duration(token.expires));
                 
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
