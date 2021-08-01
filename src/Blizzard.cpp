@@ -107,6 +107,43 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     connection->Connect(std::move(onConnect));
 }
 
+namespace {
+
+struct RealmStatus final {
+    std::string name;
+    std::string queue;
+    std::string status;
+
+    bool Parse(const std::string& buffer) {
+        rapidjson::Document json; 
+        json.Parse(buffer.data(), buffer.size());
+        if (!json.HasMember("realms")) return false;
+        const auto realms = json["realms"].GetArray();
+        assert(!realms.Empty() && "Empty realms");
+
+        // TODO: don't take just first value
+        const auto& front = *realms.Begin();
+        if (!front.HasMember("name")) return false;
+        name = front["name"].GetString();
+
+        if (!json.HasMember("has_queue")) return false;
+        const auto hasQueue = json["has_queue"].GetBool();
+        queue = hasQueue? "has queue": "no queue";
+
+        if (!json.HasMember("status") || !json["status"].HasMember("type")) return false;
+        status = json["status"]["type"].GetString();
+
+        return true;
+    }
+
+};
+
+std::string to_string(const RealmStatus& realm) {
+    return realm.name + "(" + realm.status + "): " + realm.queue;
+}
+
+} // namespace {
+
 void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::function<void()> continuation) {
     constexpr char * const kHost { "eu.api.blizzard.com" };
     constexpr char * const kService { "https" };
@@ -144,23 +181,23 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
 
                 auto shared = connection.lock();
                 const auto [head, body] = shared->AcquireResponse();
-                rapidjson::Document json; 
-                json.Parse(body.data(), body.size());
-                const auto realms = json["realms"].GetArray();
-                assert(!realms.Empty());    
-                const auto& front = *realms.Begin();
-                const std::string name = front["name"].GetString();
-                const auto hasQueue = json["has_queue"].GetBool();
-                const std::string status = json["status"]["type"].GetString();
+
+                RealmStatus realm;
+                std::string message {""};
+                if (!realm.Parse(body)) {
+                    message = "sorry, can't provide the answer. Try later please!";
+                    Console::Write("[blizzard] can't parse response: [", body, "]\n");
+                }
+                else {
+                    message = to_string(realm);
+                }
                 
                 // TODO: update this temporary solution base on IF
                 if (cmd.initiator_.empty()) { // the sourceof the command is 
-                    auto message = name + "(" + status + "): " + (hasQueue? "has queue": "no queue");
                     Console::Write("[blizzard] recv:", message, '\n');
                 }
                 else {
-                    auto message = "@" + cmd.initiator_ + ", " + name 
-                        + "(" + status + "): " + (hasQueue? "has queue": "no queue");
+                    message = "@" + cmd.initiator_ + ", " + message;
                     command::RawCommand raw { "chat", { std::move(cmd.channel_), std::move(message) } };
                     if (!service->outbox_->TryPush(std::move(raw))) {
                         Console::Write("[blizzard] fail to push realm-status response to queue: is full\n");
@@ -264,7 +301,7 @@ void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
         blizzard->QueryRealm([blizzard, cmd = std::move(cmd)](size_t realmId) {
             Console::Write("[blizzard] acquire realm id:", realmId, '\n');
             blizzard->QueryRealmStatus(realmId, std::move(cmd), []() {
-                Console::Write("[blizzard] got realm status!\n");
+                Console::Write("[blizzard] complete realm status request\n");
             });
         });
     };
