@@ -255,8 +255,9 @@ void Twitch::Invoker::Execute(command::Chat cmd) {
     }
     else {
         auto chat = twitch::Chat{cmd.channel_, cmd.message_}.Build();
+        Console::Write("[twitch] trying to send message:", chat.substr(0, chat.size() - 2), "\n");
         twitch_->irc_->ScheduleWrite(std::move(chat), []() {
-            Console::Write("[twitch] send message to channel\n");
+            Console::Write("[twitch] sent message to channel\n");
         });
     }
 }
@@ -326,10 +327,10 @@ void Twitch::Invoker::Execute(command::Arena cmd) {
     Console::Write("[twitch] execute arena command:", cmd.channel_, cmd.initiator_, '\n');
     command::RawCommand raw { "arena", { std::move(cmd.channel_), std::move(cmd.initiator_) }};
     if (twitch_->outbox_->TryPush(std::move(raw))) {
-        Console::Write("[twitch] push `Arena` to queue\n");
+        Console::Write("[twitch] push `arena` to queue\n");
     }
     else {
-        Console::Write("[twitch] failed to push `Arena` to queue is full\n");
+        Console::Write("[twitch] failed to push `arena` to queue is full\n");
     }
 }
 
