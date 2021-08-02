@@ -1,32 +1,35 @@
 #pragma once
 #include <chrono>
 #include <string>
+#include <any>
 #include <mutex>
 
 namespace chrono = std::chrono;
 
-class AccessToken {
+class CacheSlot {
 public:
     using TimePoint = chrono::time_point<chrono::steady_clock>;
     using Duration = chrono::seconds;
 
-    AccessToken() 
+    CacheSlot() 
         : content_ {}
         , update_ { chrono::steady_clock::now() }
         , duration_ { 0 }
     {}
 
-    AccessToken(std::string token, Duration expireTime) 
-        : content_ { std::move(token) }
+    template<typename T>
+    CacheSlot(T&& value, Duration /* in secs */ lifetime) 
+        : content_ { std::move(value) }
         , update_ { chrono::steady_clock::now() }
-        , duration_ { expireTime }
+        , duration_ { lifetime }
     {}
 
-    void Emplace(std::string token, Duration expireTime) noexcept {
+    template<typename T>
+    void Emplace(T&& value, Duration /* in secs */ lifetime) {
         std::lock_guard<std::mutex> lock{ mutex_ };
-        content_ = std::move(token);
+        content_.emplace<T>(std::forward<T>(value));
         update_ = chrono::steady_clock::now();
-        duration_ = expireTime;
+        duration_ = lifetime;
     }
 
     bool IsValid() const noexcept {
@@ -35,14 +38,15 @@ public:
         return chrono::duration_cast<Duration>(now - update_) < duration_;
     }
 
-    std::string Get() const {
+    template<typename T>
+    const T* Get() const {
         std::lock_guard<std::mutex> lock{ mutex_ };
-        return content_;
+        return std::any_cast<T>(&content_);
     }
 
 private:
 
-    std::string content_ {};
+    std::any content_ {};
     TimePoint update_ { chrono::steady_clock::now() };
     Duration  duration_ { 0 };
     mutable std::mutex  mutex_;

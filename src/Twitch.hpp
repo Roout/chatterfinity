@@ -83,6 +83,7 @@ public:
     void Execute(command::Leave);
     void Execute(command::Chat);
     void Execute(command::RealmStatus);
+    void Execute(command::Arena);
 
 private:
     Twitch * const twitch_ { nullptr };

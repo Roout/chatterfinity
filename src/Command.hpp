@@ -38,6 +38,14 @@ namespace command {
         static RealmStatus Create(const service::Twitch& ctx, const Params& params);
     };
 
+    struct Arena {
+        std::string channel_;  // used by twitch
+        std::string initiator_;  // used by twitch
+
+        static Arena Create(const service::Blizzard& ctx, const Params& params);
+        static Arena Create(const service::Twitch& ctx, const Params& params);
+    };
+
     struct AccessToken {
         static AccessToken Create(const service::Blizzard& ctx, const Params& params) {
             return {};
@@ -105,6 +113,7 @@ namespace command {
             static constexpr bool value { 
                 std::is_same_v<T, RealmID>
                 || std::is_same_v<T, RealmStatus>
+                || std::is_same_v<T, Arena>
                 || std::is_same_v<T, AccessToken>
             };
         };
@@ -127,6 +136,7 @@ namespace command {
                 || std::is_same_v<T, Leave>
                 || std::is_same_v<T, Pong>
                 || std::is_same_v<T, RealmStatus> // pass it to the next layer (App)
+                || std::is_same_v<T, Arena> // pass it to the next layer (App)
                 || std::is_same_v<T, Chat>
             };
         };

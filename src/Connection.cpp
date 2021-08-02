@@ -206,7 +206,9 @@ void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
         }
     }
     else {
-        log_->Write(LogType::kInfo, "sent:", bytes, "bytes\n");
+        auto buf = outbox_.GetBufferSequence().front();
+        std::string dump((char*)buf.data(), buf.size());
+        log_->Write(LogType::kInfo, "sent", dump.size(), "bytes :", dump, "\n");
         if (outbox_.GetQueueSize()) {
             // there are a few messages scheduled to be sent
             log_->Write(LogType::kInfo, "queued messages:", outbox_.GetQueueSize(), "\n");
@@ -338,7 +340,7 @@ void HttpConnection::ReadIntactBody() {
     }
     else {
         // NOTIFY that we have read body sucessfully
-        log_->Write(LogType::kInfo, "ReadIntactBody:", body_, '\n');
+        log_->Write(LogType::kInfo, "ReadIntactBody size:", body_.size(), '\n');
         if (onReadSuccess_) {
             std::invoke(onReadSuccess_);
         }
@@ -405,12 +407,12 @@ void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, s
     inbox_.consume(bytes);
     if (chunk_.consumed_ & 1) { 
         // chunk content
-        log_->Write(LogType::kInfo, "chunk:", chunk_.consumed_ / 2, ":", chunk, '\n');
+        log_->Write(LogType::kInfo, "chunk:", chunk_.consumed_ / 2, ":", chunk.size(), "bytes\n");
         chunk_.consumed_++;
         if (!chunk_.size_) {
             // This is the last part of 0 chunk so notify about that subscribers
             // Body has been already read
-            log_->Write(LogType::kInfo, "read body:\n", body_, '\n');
+            log_->Write(LogType::kInfo, "read OnReadChunkedBody size:\n", body_.size(), '\n');
             if (onReadSuccess_) {
                 std::invoke(onReadSuccess_);
             }

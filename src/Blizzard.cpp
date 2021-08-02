@@ -4,13 +4,62 @@
 #include "Request.hpp"
 #include "Connection.hpp"
 
+#include <iomanip> // std::quoted
 #include <exception>
+#include <type_traits>
 
 #include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 
 namespace {
 
-struct RealmStatusWrapper final {
+template<typename T>
+struct is_extractable_value {
+    static constexpr bool value { 
+        std::is_same_v<T, bool>
+        || std::is_same_v<T, std::uint64_t>
+        || std::is_same_v<T, int>
+        || std::is_same_v<T, std::string>
+    };
+};
+
+// utility function
+// works for: bool, string, int, uint64_t
+template<typename T, 
+    typename = std::enable_if_t<is_extractable_value<T>::value>
+>
+bool Copy(const rapidjson::Value& src, T& dst, const char *key) {
+    if (auto it = src.FindMember(key); it != src.MemberEnd()) {
+        if constexpr (std::is_same_v<bool, T>) {
+            dst = it->value.GetBool();
+            return true;
+        }
+        else if constexpr (std::is_same_v<std::uint64_t, T>) {
+            dst = it->value.GetUint64();
+            return true;
+        }
+        else if constexpr (std::is_same_v<int, T>) {
+            dst = it->value.GetInt();
+            return true;
+        }
+        else if constexpr (std::is_same_v<std::string, T>) {
+            dst = it->value.GetString();
+            return true;
+        }
+    }
+    return false;
+}
+
+template<class Encoding, class Allocator>
+std::string Serialize(const rapidjson::GenericValue<Encoding, Allocator>& value) {
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    value.Accept(writer);
+    return { buffer.GetString(), buffer.GetSize() };
+}
+
+struct RealmStatusResponse final {
     std::string name;
     std::string queue;
     std::string status;
@@ -39,12 +88,11 @@ struct RealmStatusWrapper final {
 
 };
 
-std::string to_string(const RealmStatusWrapper& realm) {
+std::string to_string(const RealmStatusResponse& realm) {
     return realm.name + "(" + realm.status + "): " + realm.queue;
 }
 
-
-struct TokenWrapper final {
+struct TokenResponse final {
     std::string content;
     std::string type;
     std::uint64_t expires;
@@ -53,26 +101,9 @@ struct TokenWrapper final {
         rapidjson::Document json; 
         json.Parse(buffer.data(), buffer.size());
 
-        if (auto it = json.FindMember("access_token"); it != json.MemberEnd()) {
-            content = it->value.GetString();
-        }
-        else {
-            return false;
-        }
-
-        if (auto it = json.FindMember("token_type"); it != json.MemberEnd()) {
-            type = it->value.GetString();
-        }
-        else {
-            return false;
-        }
-
-        if (auto it = json.FindMember("expires_in"); it != json.MemberEnd()) {
-            expires = it->value.GetUint64();
-        }
-        else {
-            return false;
-        }
+        if (!::Copy(json, content, "access_token")) return false;
+        if (!::Copy(json, type, "token_type")) return false;
+        if (!::Copy(json, expires, "expires_in")) return false;
 
         assert(type == "bearer" 
             && "Unexpected token type. Blizzard API may be changed!");
@@ -82,9 +113,73 @@ struct TokenWrapper final {
 
 };
 
-std::string to_string(const TokenWrapper& token) {
+std::string to_string(const TokenResponse& token) {
     return token.content;
 }
+
+struct Team {
+    std::string name; // team name
+    std::string realm; // realm slug
+    std::vector<std::string> players; // names of players
+    int rank;
+    int rating;
+};
+
+std::string to_string(const Team& team) {
+    std::stringstream ss;
+    ss << std::quoted(team.name, '\'') << " " << team.realm << " " 
+        << std::to_string(team.rank) << " " << std::to_string(team.rating) << " "
+        << std::to_string(team.players.size()) << ":";
+    for (const auto& player: team.players) ss << " " << std::quoted(player, '\'');
+    return ss.str();
+}
+
+struct ArenaResponse final {
+    std::vector<Team> teams;
+
+    bool Parse(const std::string& buffer) {
+        rapidjson::Document json; 
+        json.Parse(buffer.data(), buffer.size());
+
+        auto entries_it = json.FindMember("entries");
+        if (entries_it == json.MemberEnd()) return false;
+        const auto& entries = entries_it->value.GetArray();
+        for (auto&& entry: entries) {
+            Team team;
+            if (!::Copy(entry, team.rank, "rank")) return false;
+            if (!::Copy(entry, team.rating, "rating")) return false;
+
+            auto team_it = entry.FindMember("team");
+            if (team_it == entry.MemberEnd()) return false;
+            const auto& teamValue = team_it->value;
+            { // team : {
+                if (!::Copy(teamValue, team.name, "name")) return false;
+            
+                { // realm : {
+                    auto realm_it = teamValue.FindMember("realm");
+                    if (realm_it == teamValue.MemberEnd()) return false;
+                    if (!::Copy(realm_it->value, team.realm, "slug")) return false;
+                } // } realm
+
+                auto members_it = teamValue.FindMember("members");
+                if (members_it != teamValue.MemberEnd()) { // members: { 
+                    const auto& members = members_it->value.GetArray();
+                    
+                    team.players.resize(members.Size());
+                    size_t i = 0;
+                    for (auto&& player: members) {
+                        auto character_it = player.FindMember("character");
+                        if (character_it == player.MemberEnd()) return false;
+                        if (!::Copy(character_it->value, team.players[i], "name")) return false;
+                        ++i;
+                    }
+                } // } members 
+            } // } team
+            teams.emplace_back(std::move(team));
+        }
+        return true;
+    }
+};
 
 } // namespace {
 
@@ -145,7 +240,9 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
-    auto onConnect = [request = blizzard::Realm(token_.Get()).Build()
+    assert(token_.IsValid());
+    blizzard::Realm request{ *token_.Get<std::string>() };
+    auto onConnect = [request = request.Build()
         , service = this
         , callback = std::move(continuation)
         , connection = utils::WeakFrom<HttpConnection>(connection)
@@ -187,14 +284,19 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     connection->Connect(std::move(onConnect));
 }
 
-void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::function<void()> continuation) {
+void Blizzard::QueryRealmStatus(size_t realmId
+    , command::RealmStatus cmd
+    , std::function<void()> continuation
+) {
     constexpr char * const kHost { "eu.api.blizzard.com" };
     constexpr char * const kService { "https" };
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
 
-    auto onConnect = [request = blizzard::RealmStatus(realmId, token_.Get()).Build()
+    assert(token_.IsValid());
+    blizzard::RealmStatus request{ realmId, *token_.Get<std::string>() };
+    auto onConnect = [request = request.Build()
         , cmd = std::move(cmd)
         , service = this
         , callback = std::move(continuation)
@@ -225,8 +327,8 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
                 auto shared = connection.lock();
                 const auto [head, body] = shared->AcquireResponse();
 
-                RealmStatusWrapper realm;
-                std::string message {""};
+                RealmStatusResponse realm;
+                std::string message;
                 if (!realm.Parse(body)) {
                     message = "sorry, can't provide the answer. Try later please!";
                     Console::Write("[blizzard] can't parse response: [", body, "]\n");
@@ -241,17 +343,17 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
                 }
                 else {
                     message = "@" + cmd.initiator_ + ", " + message;
-                    command::RawCommand raw { "chat", { std::move(cmd.channel_), std::move(message) } };
+                    command::RawCommand raw { "chat", { std::move(cmd.channel_)
+                        , std::move(message) } };
                     if (!service->outbox_->TryPush(std::move(raw))) {
-                        Console::Write("[blizzard] fail to push realm-status response to queue: is full\n");
+                        Console::Write("[blizzard] fail to push !realm-status"
+                            " response to queue: it is full\n");
                     }
                 }
-               
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
                 }
             };
-
             auto shared = connection.lock();
             shared->Read(std::move(OnReadSuccess));
         });
@@ -301,11 +403,13 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
                 auto shared = connection.lock();
                 const auto [head, body] = shared->AcquireResponse();
                 
-                TokenWrapper token;
+                TokenResponse token;
                 token.Parse(body);
 
-                Console::Write("[blizzard] extracted token: [", to_string(token), "]\n");
-                service->token_.Emplace(std::move(token.content), AccessToken::Duration(token.expires));
+                Console::Write("[blizzard] extracted token: ["
+                    , to_string(token), "]\n");
+                service->token_.Emplace<std::string>(std::move(token.content)
+                    , CacheSlot::Duration(token.expires));
                 
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
@@ -330,6 +434,131 @@ void Blizzard::Invoker::Execute(command::RealmID) {
     }
     else {
         std::invoke(initiateRealmQuery);
+    }
+}
+
+void Blizzard::Invoker::Execute(command::Arena command) {
+    using Callback = std::function<void(const command::Arena&)>;
+
+    auto handleResponse = [service = blizzard_](const command::Arena& cmd) {
+        const auto& cache = service->arena_;
+        assert(cache.IsValid());
+
+        std::string message;
+        if (const auto& teams = cache.Get<ArenaResponse>()->teams; 
+            teams.empty()
+        ) {
+            message = "sorry, can't provide the answer. Try later please!";
+        }
+        else {
+            message = to_string(teams.front());
+            Console::Write("[blizzard] arena teams:", teams.size()
+                , "; first 2x2 rating:", message, "\n");
+        }
+
+        // TODO: update this temporary solution base on IF
+        if (!cmd.initiator_.empty() && !cmd.channel_.empty()) {
+            message = "@" + cmd.initiator_ + ", " + message;
+            Console::Write("[blizzard] send message:", message, "\n");
+            command::RawCommand raw { "chat"
+                , { cmd.channel_, std::move(message) }};
+            
+            if (!service->outbox_->TryPush(std::move(raw))) {
+                Console::Write("[blizzard] fail to push !arena "
+                    "response to queue: it is full\n");
+            }
+        }
+    };
+
+    auto queryArena = [blizzard = blizzard_
+        , cmd = command
+        , callback = handleResponse]() 
+    {
+        Console::Write("[blizzard] arena: [ initiator =",
+             cmd.initiator_, ", channel =", cmd.channel_, "]\n");
+
+        constexpr char * const kHost { "eu.api.blizzard.com" };
+        constexpr char * const kService { "https" };
+        constexpr uint64_t kSeason { 1 };
+        constexpr uint64_t kTeamSize { 2 };
+
+        auto connection = std::make_shared<HttpConnection>(
+            blizzard->context_, blizzard->ssl_
+            , kHost, kService, blizzard->GenerateId()
+        );
+        
+        assert(blizzard->token_.IsValid());
+        auto token = *blizzard->token_.Get<std::string>();
+        auto arena = blizzard::Arena(kSeason, kTeamSize, token).Build();
+        auto onConnect = [request = std::move(arena)
+            , callback = std::move(callback)
+            , service = blizzard
+            , cmd = std::move(cmd)
+            , connection = utils::WeakFrom<HttpConnection>(connection)
+        ]() {
+            assert(connection.use_count() == 1 && 
+                "Fail invariant:"
+                "Expected: 1 ref - instance which is executing Connection::OnWrite"
+                "Assertion Failure may be caused by changing the "
+                "(way)|(place where) this callback is being invoked"
+            );
+            auto shared = connection.lock();
+            shared->ScheduleWrite(std::move(request), [service
+                , callback = std::move(callback)
+                , cmd = std::move(cmd)
+                , connection
+            ]() {
+                assert(connection.use_count() == 1);
+
+                auto OnReadSuccess = [service
+                    , callback = std::move(callback)
+                    , connection
+                    , cmd = std::move(cmd)
+                ]() mutable {
+                    assert(connection.use_count() == 1);
+                    auto shared = connection.lock();
+
+                    const auto [head, body] = shared->AcquireResponse();
+                    if (head.statusCode_ != 200) {
+                        Console::Write("[blizzard] can't get response: body = \"", body, "\"\n");
+                        constexpr std::chrono::seconds kLifetime { 30 * 60 };
+                        // emplace empty arena to not repeat the request too frequently
+                        service->arena_.Emplace(ArenaResponse{}, kLifetime);
+                    }
+
+                    ArenaResponse arena;
+                    if (!arena.Parse(body)) {
+                        Console::Write("[blizzard] can't parse fully arena response\n");
+                    }
+                    else {
+                        Console::Write("[blizzard] parsed arena response successfully\n");
+                    }
+                    constexpr std::chrono::seconds kLifetime { 1 * 60 * 60 };
+                    // Can emplace partially parsed arena to not repeat the request too frequently
+                    // because Blizzard API may be changed
+                    service->arena_.Emplace(std::move(arena), kLifetime);
+
+                    std::invoke(callback, cmd);
+                };
+
+                auto shared = connection.lock();
+                shared->Read(std::move(OnReadSuccess));
+            });
+        };
+        connection->Connect(std::move(onConnect));
+    };
+
+    if (!blizzard_->arena_.IsValid()) {
+        if (!blizzard_->token_.IsValid()) {
+            blizzard_->AcquireToken(std::move(queryArena));
+        }
+        else {
+            std::invoke(queryArena);
+        }
+    }
+    else {
+        // just use info from the cache
+        std::invoke(handleResponse, command);
     }
 }
 

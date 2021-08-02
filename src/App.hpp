@@ -38,6 +38,7 @@ public:
             {"realm-id"sv,      Translator::CreateHandle<command::RealmID>(*blizzard_) },
             {"realm-status"sv,  Translator::CreateHandle<command::RealmStatus>(*blizzard_) },
             {"blizzard-token"sv,Translator::CreateHandle<command::AccessToken>(*blizzard_) },
+            {"arena"sv,         Translator::CreateHandle<command::Arena>(*blizzard_) },
             
             {"validate"sv,      Translator::CreateHandle<command::Validate>(*twitch_) },
             {"login"sv,         Translator::CreateHandle<command::Login>(*twitch_) },

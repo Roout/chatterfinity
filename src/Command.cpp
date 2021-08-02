@@ -30,6 +30,24 @@ namespace command {
         return {};
     }
 
+    Arena Arena::Create(const service::Blizzard& ctx, const Params& params) {
+        if (params.size() == 2) {
+            std::string channel { params[0] };
+            std::string initiator { params[1] };
+            return { std::move(channel), std::move(initiator) };
+        }
+        return {};
+    }
+
+    Arena Arena::Create(const service::Twitch& ctx, const Params& params) {
+        if (params.size() == 2) {
+            std::string channel { params[0] };
+            std::string initiator { params[1] };
+            return { std::move(channel), std::move(initiator) };
+        }
+        return {};
+    }
+
     Login Login::Create(const service::Twitch& ctx, const Params& params) {
         if (params.size() == 2) {
             std::string user { params[0] };
