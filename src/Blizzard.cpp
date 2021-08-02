@@ -282,7 +282,10 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     connection->Connect(std::move(onConnect));
 }
 
-void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::function<void()> continuation) {
+void Blizzard::QueryRealmStatus(size_t realmId
+    , command::RealmStatus cmd
+    , std::function<void()> continuation
+) {
     constexpr char * const kHost { "eu.api.blizzard.com" };
     constexpr char * const kService { "https" };
     auto connection = std::make_shared<HttpConnection>(
@@ -336,9 +339,11 @@ void Blizzard::QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::f
                 }
                 else {
                     message = "@" + cmd.initiator_ + ", " + message;
-                    command::RawCommand raw { "chat", { std::move(cmd.channel_), std::move(message) } };
+                    command::RawCommand raw { "chat", { std::move(cmd.channel_)
+                        , std::move(message) } };
                     if (!service->outbox_->TryPush(std::move(raw))) {
-                        Console::Write("[blizzard] fail to push !realm-status response to queue: it is full\n");
+                        Console::Write("[blizzard] fail to push !realm-status"
+                            " response to queue: it is full\n");
                     }
                 }
                
@@ -399,8 +404,10 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
                 TokenWrapper token;
                 token.Parse(body);
 
-                Console::Write("[blizzard] extracted token: [", to_string(token), "]\n");
-                service->token_.Emplace(std::move(token.content), AccessToken::Duration(token.expires));
+                Console::Write("[blizzard] extracted token: ["
+                    , to_string(token), "]\n");
+                service->token_.Emplace(std::move(token.content)
+                    , AccessToken::Duration(token.expires));
                 
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
@@ -460,7 +467,10 @@ void Blizzard::Invoker::Execute(command::Arena arena) {
             ]() {
                 assert(connection.use_count() == 1);
 
-                auto OnReadSuccess = [service, connection, cmd = std::move(cmd)]() mutable {
+                auto OnReadSuccess = [service
+                    , connection
+                    , cmd = std::move(cmd)
+                ]() mutable {
                     assert(connection.use_count() == 1);
                     
                     auto shared = connection.lock();
@@ -469,20 +479,26 @@ void Blizzard::Invoker::Execute(command::Arena arena) {
                     std::string message;
                     if(!arena.Parse(body)) {
                         message = "sorry, can't provide the answer. Try later please!";
-                        Console::Write("[blizzard] can't parse arena response: code =", head.statusCode_, "; size of body =", body.size(), '\n');
+                        Console::Write("[blizzard] can't parse arena response: code ="
+                            , head.statusCode_, "; size of body =", body.size(), '\n');
                     }
                     else {
-                        message = to_string(arena.teams.front());
-                        Console::Write("[blizzard] arena teams:", arena.teams.size(), "\n");
-                        Console::Write("[blizzard] arena: rank first 2x2 rating:", to_string(arena.teams.front()), "\n");
+                        const auto& teams = arena.teams;
+                        message = to_string(teams.front());
+                        Console::Write("[blizzard] arena: \n > arena teams:"
+                            , teams.size(), "\n > first 2x2 rating:"
+                            , to_string(teams.front()), "\n");
                     }
 
                     // TODO: update this temporary solution base on IF
-                    if (!cmd.initiator_.empty() && !cmd.channel_.empty()) { // the sourceof the command is 
+                    if (!cmd.initiator_.empty() && !cmd.channel_.empty()) {
                         message = "@" + cmd.initiator_ + ", " + message;
-                        command::RawCommand raw { "chat", { std::move(cmd.channel_), std::move(message) } };
+                        command::RawCommand raw { "chat"
+                            , { std::move(cmd.channel_), std::move(message) } 
+                        };
                         if (!service->outbox_->TryPush(std::move(raw))) {
-                            Console::Write("[blizzard] fail to push !arena response to queue: it is full\n");
+                            Console::Write("[blizzard] fail to push !arena "
+                                "response to queue: it is full\n");
                         }
                     }
                 };
