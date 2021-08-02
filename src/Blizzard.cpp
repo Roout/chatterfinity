@@ -59,7 +59,7 @@ std::string Serialize(const rapidjson::GenericValue<Encoding, Allocator>& value)
     return { buffer.GetString(), buffer.GetSize() };
 }
 
-struct RealmStatusWrapper final {
+struct RealmStatusResponse final {
     std::string name;
     std::string queue;
     std::string status;
@@ -88,11 +88,11 @@ struct RealmStatusWrapper final {
 
 };
 
-std::string to_string(const RealmStatusWrapper& realm) {
+std::string to_string(const RealmStatusResponse& realm) {
     return realm.name + "(" + realm.status + "): " + realm.queue;
 }
 
-struct TokenWrapper final {
+struct TokenResponse final {
     std::string content;
     std::string type;
     std::uint64_t expires;
@@ -113,7 +113,7 @@ struct TokenWrapper final {
 
 };
 
-std::string to_string(const TokenWrapper& token) {
+std::string to_string(const TokenResponse& token) {
     return token.content;
 }
 
@@ -127,14 +127,14 @@ struct Team {
 
 std::string to_string(const Team& team) {
     std::stringstream ss;
-    ss << std::quoted(team.name) << " " << team.realm << " " 
+    ss << std::quoted(team.name, '\'') << " " << team.realm << " " 
         << std::to_string(team.rank) << " " << std::to_string(team.rating) << " "
         << std::to_string(team.players.size()) << ":";
-    for (const auto& player: team.players) ss << " " << std::quoted(player);
+    for (const auto& player: team.players) ss << " " << std::quoted(player, '\'');
     return ss.str();
 }
 
-struct ArenaTeams final {
+struct ArenaResponse final {
     std::vector<Team> teams;
 
     bool Parse(const std::string& buffer) {
@@ -240,7 +240,9 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
-    auto onConnect = [request = blizzard::Realm(token_.Get()).Build()
+    assert(token_.IsValid());
+    blizzard::Realm request{ *token_.Get<std::string>() };
+    auto onConnect = [request = request.Build()
         , service = this
         , callback = std::move(continuation)
         , connection = utils::WeakFrom<HttpConnection>(connection)
@@ -292,7 +294,9 @@ void Blizzard::QueryRealmStatus(size_t realmId
         context_, ssl_ , kHost, kService, GenerateId()
     );
 
-    auto onConnect = [request = blizzard::RealmStatus(realmId, token_.Get()).Build()
+    assert(token_.IsValid());
+    blizzard::RealmStatus request{ realmId, *token_.Get<std::string>() };
+    auto onConnect = [request = request.Build()
         , cmd = std::move(cmd)
         , service = this
         , callback = std::move(continuation)
@@ -323,8 +327,8 @@ void Blizzard::QueryRealmStatus(size_t realmId
                 auto shared = connection.lock();
                 const auto [head, body] = shared->AcquireResponse();
 
-                RealmStatusWrapper realm;
-                std::string message {""};
+                RealmStatusResponse realm;
+                std::string message;
                 if (!realm.Parse(body)) {
                     message = "sorry, can't provide the answer. Try later please!";
                     Console::Write("[blizzard] can't parse response: [", body, "]\n");
@@ -346,12 +350,10 @@ void Blizzard::QueryRealmStatus(size_t realmId
                             " response to queue: it is full\n");
                     }
                 }
-               
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
                 }
             };
-
             auto shared = connection.lock();
             shared->Read(std::move(OnReadSuccess));
         });
@@ -401,13 +403,13 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
                 auto shared = connection.lock();
                 const auto [head, body] = shared->AcquireResponse();
                 
-                TokenWrapper token;
+                TokenResponse token;
                 token.Parse(body);
 
                 Console::Write("[blizzard] extracted token: ["
                     , to_string(token), "]\n");
-                service->token_.Emplace(std::move(token.content)
-                    , AccessToken::Duration(token.expires));
+                service->token_.Emplace<std::string>(std::move(token.content)
+                    , CacheSlot::Duration(token.expires));
                 
                 if (callback) {
                     boost::asio::post(*service->context_, callback);
@@ -435,21 +437,61 @@ void Blizzard::Invoker::Execute(command::RealmID) {
     }
 }
 
-void Blizzard::Invoker::Execute(command::Arena arena) {
-    auto arenaQuery = [blizzard = blizzard_, cmd = std::move(arena)]() {
+void Blizzard::Invoker::Execute(command::Arena command) {
+    using Callback = std::function<void(const command::Arena&)>;
+
+    auto handleResponse = [service = blizzard_](const command::Arena& cmd) {
+        const auto& cache = service->arena_;
+        assert(cache.IsValid());
+
+        std::string message;
+        if (const auto& teams = cache.Get<ArenaResponse>()->teams; 
+            teams.empty()
+        ) {
+            message = "sorry, can't provide the answer. Try later please!";
+        }
+        else {
+            message = to_string(teams.front());
+            Console::Write("[blizzard] arena teams:", teams.size()
+                , "; first 2x2 rating:", message, "\n");
+        }
+
+        // TODO: update this temporary solution base on IF
+        if (!cmd.initiator_.empty() && !cmd.channel_.empty()) {
+            message = "@" + cmd.initiator_ + ", " + message;
+            Console::Write("[blizzard] send message:", message, "\n");
+            command::RawCommand raw { "chat"
+                , { cmd.channel_, std::move(message) }};
+            
+            if (!service->outbox_->TryPush(std::move(raw))) {
+                Console::Write("[blizzard] fail to push !arena "
+                    "response to queue: it is full\n");
+            }
+        }
+    };
+
+    auto queryArena = [blizzard = blizzard_
+        , cmd = command
+        , callback = handleResponse]() 
+    {
         Console::Write("[blizzard] arena: [ initiator =",
              cmd.initiator_, ", channel =", cmd.channel_, "]\n");
 
         constexpr char * const kHost { "eu.api.blizzard.com" };
         constexpr char * const kService { "https" };
-        constexpr std::uint64_t kSeason { 1 };
-        constexpr std::uint64_t kTeamSize { 2 };
+        constexpr uint64_t kSeason { 1 };
+        constexpr uint64_t kTeamSize { 2 };
 
         auto connection = std::make_shared<HttpConnection>(
-            blizzard->context_, blizzard->ssl_, kHost, kService, blizzard->GenerateId()
+            blizzard->context_, blizzard->ssl_
+            , kHost, kService, blizzard->GenerateId()
         );
-        auto arena = blizzard::Arena(kSeason, kTeamSize, blizzard->token_.Get()).Build();
+        
+        assert(blizzard->token_.IsValid());
+        auto token = *blizzard->token_.Get<std::string>();
+        auto arena = blizzard::Arena(kSeason, kTeamSize, token).Build();
         auto onConnect = [request = std::move(arena)
+            , callback = std::move(callback)
             , service = blizzard
             , cmd = std::move(cmd)
             , connection = utils::WeakFrom<HttpConnection>(connection)
@@ -462,45 +504,41 @@ void Blizzard::Invoker::Execute(command::Arena arena) {
             );
             auto shared = connection.lock();
             shared->ScheduleWrite(std::move(request), [service
+                , callback = std::move(callback)
                 , cmd = std::move(cmd)
                 , connection
             ]() {
                 assert(connection.use_count() == 1);
 
                 auto OnReadSuccess = [service
+                    , callback = std::move(callback)
                     , connection
                     , cmd = std::move(cmd)
                 ]() mutable {
                     assert(connection.use_count() == 1);
-                    
                     auto shared = connection.lock();
+
                     const auto [head, body] = shared->AcquireResponse();
-                    ArenaTeams arena{};
-                    std::string message;
-                    if(!arena.Parse(body)) {
-                        message = "sorry, can't provide the answer. Try later please!";
-                        Console::Write("[blizzard] can't parse arena response: code ="
-                            , head.statusCode_, "; size of body =", body.size(), '\n');
-                    }
-                    else {
-                        const auto& teams = arena.teams;
-                        message = to_string(teams.front());
-                        Console::Write("[blizzard] arena: \n > arena teams:"
-                            , teams.size(), "\n > first 2x2 rating:"
-                            , to_string(teams.front()), "\n");
+                    if (head.statusCode_ != 200) {
+                        Console::Write("[blizzard] can't get response: body = \"", body, "\"\n");
+                        constexpr std::chrono::seconds kLifetime { 30 * 60 };
+                        // emplace empty arena to not repeat the request too frequently
+                        service->arena_.Emplace(ArenaResponse{}, kLifetime);
                     }
 
-                    // TODO: update this temporary solution base on IF
-                    if (!cmd.initiator_.empty() && !cmd.channel_.empty()) {
-                        message = "@" + cmd.initiator_ + ", " + message;
-                        command::RawCommand raw { "chat"
-                            , { std::move(cmd.channel_), std::move(message) } 
-                        };
-                        if (!service->outbox_->TryPush(std::move(raw))) {
-                            Console::Write("[blizzard] fail to push !arena "
-                                "response to queue: it is full\n");
-                        }
+                    ArenaResponse arena;
+                    if (!arena.Parse(body)) {
+                        Console::Write("[blizzard] can't parse fully arena response\n");
                     }
+                    else {
+                        Console::Write("[blizzard] parsed arena response successfully\n");
+                    }
+                    constexpr std::chrono::seconds kLifetime { 1 * 60 * 60 };
+                    // Can emplace partially parsed arena to not repeat the request too frequently
+                    // because Blizzard API may be changed
+                    service->arena_.Emplace(std::move(arena), kLifetime);
+
+                    std::invoke(callback, cmd);
                 };
 
                 auto shared = connection.lock();
@@ -509,11 +547,18 @@ void Blizzard::Invoker::Execute(command::Arena arena) {
         };
         connection->Connect(std::move(onConnect));
     };
-    if (!blizzard_->token_.IsValid()) {
-        blizzard_->AcquireToken(std::move(arenaQuery));
+
+    if (!blizzard_->arena_.IsValid()) {
+        if (!blizzard_->token_.IsValid()) {
+            blizzard_->AcquireToken(std::move(queryArena));
+        }
+        else {
+            std::invoke(queryArena);
+        }
     }
     else {
-        std::invoke(arenaQuery);
+        // just use info from the cache
+        std::invoke(handleResponse, command);
     }
 }
 

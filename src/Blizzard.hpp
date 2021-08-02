@@ -5,7 +5,7 @@
 #include <boost/asio/ssl.hpp>
 
 #include "Command.hpp"
-#include "Token.hpp"
+#include "Cache.hpp"
 #include "ConcurrentQueue.hpp"
 #include "Environment.hpp"
 
@@ -52,7 +52,9 @@ private:
 
     void QueryRealm(std::function<void(size_t realmId)> continuation = {});
 
-    void QueryRealmStatus(size_t realmId, command::RealmStatus cmd, std::function<void()> continuation = {});
+    void QueryRealmStatus(size_t realmId
+        , command::RealmStatus cmd
+        , std::function<void()> continuation = {});
 
     void AcquireToken(std::function<void()> continuation = {});
 
@@ -66,7 +68,9 @@ private:
     static constexpr size_t kThreads { 2 };
     std::vector<std::thread> threads_;
 
-    AccessToken token_;
+    // TODO: Add everything to cache-table
+    CacheSlot token_;
+    CacheSlot arena_;
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;
     std::shared_ptr<ssl::context> ssl_;

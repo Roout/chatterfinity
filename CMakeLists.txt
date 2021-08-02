@@ -11,7 +11,7 @@ set(sources)
 
 list(APPEND headers
 	"src/Connection.hpp"
-	"src/Token.hpp"
+	"src/Cache.hpp"
 	"src/Request.hpp"
 	"src/Response.hpp"
 	"src/Utility.hpp"
