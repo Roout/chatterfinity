@@ -1,11 +1,12 @@
 # Chatterfinity
 
-Chat bot will provide an information from the WOW database through chat in twitch. Bot is in development. Other functionality will be added later and is not planned yet.
+Chat bot provides in Twtich chat an information about arena leaderboard, server status, etc. Bot uses WOW Blizzard API.  
+Bot is in development. Some functionality will be added later.
 
 ## Remote services
 
 - Discord
-- [Twitch](https://dev.twitch.tv/docs/irc)
+- [Twitch API](https://dev.twitch.tv/docs/api)
 - [World of Warcraft API](https://develop.battle.net/documentation/world-of-warcraft-classic/game-data-apis)
 
 ## Dependencies
@@ -22,14 +23,16 @@ Chat bot will provide an information from the WOW database through chat in twitc
 
 ### Configuration
 
-- The example of the file is provided. **See** [services-example.json](secret/services.json).  
+- The example of the [services-example.json](secret/services.json) is provided. 
 - You can get `client_id` and `secret` in [Twitch Developer Console](https://dev.twitch.tv/) and [Blizzard Developer Console](https://develop.battle.net/).
-- **Note, secret** is required only for blizzard [Client Credential Flow](https://develop.battle.net/documentation/guides/using-oauth/client-credentials-flow) and **MUST NOT** be provided to any other party.  
-- You can get `token` for twitch setting up local [server](https://github.com/Roout/twitch-token) and opening it in browser at "http://localhost:3000". **See** more information at the page [twitch-token generator](https://github.com/Roout/twitch-token).
+- **Secret** is required only for Blizzard [Client Credential Flow](https://develop.battle.net/documentation/guides/using-oauth/client-credentials-flow) and **MUST NOT** be provided to any other party.  
+- You can get Twitch `token` running [local server](https://github.com/Roout/twitch-token) and opening it in browser at <http://localhost:3000>. More information is provided at the page of the [twitch-token generator](https://github.com/Roout/twitch-token).
 
 ## Commands
 
-Commands can be invoked within either Console either twitch chat. Chat messages can be russian.
+Commands can be invoked within either Console either Twitch chat. Chat messages can be russian.  
+Commands which have already been implemented are quite crude without any customization and flexibility because they are used to test core of the bot now.  
+Bot talks in chat via [PRIVMSG](https://dev.twitch.tv/docs/irc/guide) IRC command.
 
 Bot supports UTF8 charset:
 
@@ -38,16 +41,16 @@ Bot supports UTF8 charset:
 
 ### Twitch chat
 
-For now you can invoke the following commands within channel chat:
+For now you can invoke the following custom commands within channel chat:
 
 | name           | description                                        |
 |----------------|----------------------------------------------------|
 | `!realm-status`| Show flamegor server status and queue information  |
-| `!arena`       | Show current top 1 EU region                       |
+| `!arena`       | Show current top 1 of the EU region                |
 
 ### Console
 
-For now you can invoke the following commands within console:
+For now you can invoke the following custom commands within console:
 
 | Name           |  Params            | Description                                                        |
 |----------------|--------------------|--------------------------------------------------------------------|
@@ -65,15 +68,15 @@ For now you can invoke the following commands within console:
 
 ### Chat bot commands
 
-- [ ] choose creature for user (customized **!dice** roll);
+- [ ] choose creature for user (customized **!dice** roll)
 - [ ] arena leaderboard:
-  - [x] top 1 team of the provided realm (implemented partialy)
-  - [ ] top 1 team of the provided region,
-  - [ ] rating for the team by player name,
-  - [ ] win-lose statistics for the team by player name;
-- [ ] auction (don't know whether it will be usefull)?
+  - [x] top 1 team of the provided realm
+  - [ ] top 1 team of the provided region
+  - [ ] rating for the team by player name
+  - [ ] win-lose statistics for the team by player name
+- [ ] auction (don't know whether it will be usefull)
 
-Arena teams is the most interesting thing for WOW community so it will be the most important part of the bot.
+Arena leaderboard is one of the most interesting thing for WOW community so it will be the most important part of the bot.
 
 ### Restrictions
 
@@ -89,7 +92,7 @@ Bot DOESN't consider twitch restrictions yet. Following restriction will be impl
 The following certificates are downloaded for application to be able to work with several APIs.
 They are used by application when connection is trying to complete a handshake.
 Connection needs a CA information to verify if the certificate is "valid" or not.
-Connection uses (loads for [ssl context](https://www.boost.org/doc/libs/1_72_0/doc/html/boost_asio/reference/ssl__context/load_verify_file.html)) root CA to verify service.
+Connection uses (loads for [SSL Context](https://www.boost.org/doc/libs/1_72_0/doc/html/boost_asio/reference/ssl__context/load_verify_file.html)) root CA to verify a service.
 
 ### Blizzard
 
