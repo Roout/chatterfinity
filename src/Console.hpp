@@ -55,7 +55,7 @@ private:
 
 class Console::Invoker {
 public:
-    Console::Invoker(Console *console) : console_ { console } {}
+    Invoker(Console *console) : console_ { console } {}
 
     void Execute(command::Shutdown);
     
