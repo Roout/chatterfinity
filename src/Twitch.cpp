@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <cctype>
 
 namespace {
     std::string ExtractBetween(const std::string& src, char left, char right) {
@@ -35,9 +36,9 @@ Twitch::Twitch(const Config *config, Container * outbox)
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
     , translator_ {}
-    , invoker_ { std::make_unique<Invoker>(this) }
     , config_ { config }
     , outbox_ { outbox }
+    , invoker_ { std::make_unique<Invoker>(this) }
 {
     assert(config_ && "Config is NULL");
     assert(outbox_ && "Queue is NULL");
