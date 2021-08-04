@@ -79,8 +79,40 @@ namespace irc {
 
 Message ParseMessage(std::string_view src) {
     Message message {};
-    src = utils::Trim(src);
+    src = utils::Trim(src);   
     assert(!src.empty());
+    // extract tags
+    // @badge-info=;badges=;color=;display-name=chatterfinity;
+    // emote-sets=0;user-id=713654970;user-type= :tmi.twitch.tv GLOBALUSERSTATE
+    if (src.front() == '@') {
+        src.remove_prefix(1);
+        constexpr std::string_view kTagDelimiter { "; " };
+        constexpr char kKeyDelimiter { '=' };
+        while (src.front() != ':') { 
+            Message::Tag tag;
+            if (auto tagDelim = src.find_first_of(kTagDelimiter); 
+                tagDelim != std::string_view::npos
+            ) {
+                if (auto keyDelim = src.find_first_of(kKeyDelimiter);
+                    keyDelim != std::string_view::npos
+                ) {
+                    tag.key_.assign(src.data(), keyDelim);
+                    tag.value_.assign(src.data() + keyDelim + 1, tagDelim - keyDelim - 1);
+                    src.remove_prefix(tagDelim + 1);
+                }
+                else {
+                    assert(false && "Unexpected IRC v3 Tag Message Format");
+                }
+            }
+            else {
+                assert(false && "Unexpected IRC v3 Tag Message Format:"
+                    "absent tags-prefix delimiter");
+            }
+            assert(!src.empty() && "Unexpected IRC v3 Tag Message Format");
+            message.tags_.emplace_back(std::move(tag));
+        }
+    }
+    src = utils::Trim(src);
     // extract prefix
     // <servername> | <nick> [ '!' <user> ] [ '@' <host> ]
     if (src.front() == ':') {
@@ -99,16 +131,18 @@ Message ParseMessage(std::string_view src) {
 
     // extract command (command,' ')
     // <letter> { <letter> } | <number> <number> <number>
-    if (auto separator = src.find_first_of(Message::kSpace); 
+    if (auto separator = src.find_first_of(" "); 
         separator != std::string_view::npos
     ) {
         message.command_ = src.substr(0, separator);
         src.remove_prefix(separator + 1);
         src = utils::Trim(src);
-        // TODO: add check whether command is valid or not
+        // TODO: add syntax check whether command is valid or not
     }
     else {
-        assert(false && "wrong IRC message format: no command");
+        // There were no params after the command
+        message.command_ = src;
+        src= {};
     }
 
     // parse params:
