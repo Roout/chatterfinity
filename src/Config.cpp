@@ -1,6 +1,7 @@
 #include "Config.hpp"
 
 #include <cassert>
+#include <stdexcept>
 #include <array>
 #include <fstream>
 #include <streambuf>
@@ -16,7 +17,7 @@ Config::Config(std::string path)
 void Config::Read() {
     std::ifstream in(path_);
     if (!in.is_open()) {
-        throw std::exception("Failed to open config file");
+        throw std::runtime_error("Failed to open config file");
     }
 
     const std::string buffer {

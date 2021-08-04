@@ -8,7 +8,7 @@
 
 namespace command {
 
-    RealmStatus RealmStatus::Create(const service::Blizzard& ctx,
+    RealmStatus RealmStatus::Create(const service::Blizzard&,
         const Params& params
     ) {
         if (params.size() == 2) {
@@ -19,7 +19,7 @@ namespace command {
         return {};
     }
 
-    RealmStatus RealmStatus::Create(const service::Twitch& ctx,
+    RealmStatus RealmStatus::Create(const service::Twitch&,
         const Params& params
     ) {
         if (params.size() == 2) {
@@ -30,7 +30,7 @@ namespace command {
         return {};
     }
 
-    Arena Arena::Create(const service::Blizzard& ctx, const Params& params) {
+    Arena Arena::Create(const service::Blizzard&, const Params& params) {
         if (params.size() == 2) {
             std::string channel { params[0] };
             std::string initiator { params[1] };
@@ -39,7 +39,7 @@ namespace command {
         return {};
     }
 
-    Arena Arena::Create(const service::Twitch& ctx, const Params& params) {
+    Arena Arena::Create(const service::Twitch&, const Params& params) {
         if (params.size() == 2) {
             std::string channel { params[0] };
             std::string initiator { params[1] };
@@ -66,7 +66,7 @@ namespace command {
         
     }
 
-    Join Join::Create(const service::Twitch& ctx, const Params& params) {
+    Join Join::Create(const service::Twitch&, const Params& params) {
         if (params.size() == 1) {
             return { std::string(params.front()) };
         }
@@ -74,7 +74,7 @@ namespace command {
         return {};
     }
 
-    Leave Leave::Create(const service::Twitch& ctx, const Params& params) {
+    Leave Leave::Create(const service::Twitch&, const Params& params) {
         if (params.size() == 1) {
             return { std::string(params.front()) };
         }
@@ -82,7 +82,7 @@ namespace command {
         return {};
     }
 
-    Chat Chat::Create(const service::Twitch& ctx, const Params& params) {
+    Chat Chat::Create(const service::Twitch&, const Params& params) {
         if (params.size() == 2) {
             std::string channel { params[0] };
             std::string message { params[1] };

@@ -38,7 +38,7 @@ namespace utils {
 
     inline std::string AsLowerCase(std::string str) noexcept {
         for (auto&c: str) c = std::tolower(c);
-        return std::move(str);
+        return str;
     }
 
     constexpr std::string_view Trim(
