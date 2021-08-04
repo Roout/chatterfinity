@@ -115,6 +115,7 @@ std::string Join::Build() const {
 
 std::string IrcAuth::Build() const {
     const char *requestTemplate = 
+        "CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands\r\n"
         "PASS oauth:%1%\r\n"
         "NICK %2%\r\n";
     return (boost::format(requestTemplate) % token_ % user_).str();
