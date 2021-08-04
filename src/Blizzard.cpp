@@ -234,8 +234,8 @@ void Blizzard::Run() {
 }
 
 void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
-    constexpr char * const kHost { "eu.api.blizzard.com" };
-    constexpr char * const kService { "https" };
+    constexpr const char * const kHost { "eu.api.blizzard.com" };
+    constexpr const char * const kService { "https" };
 
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
@@ -288,8 +288,8 @@ void Blizzard::QueryRealmStatus(size_t realmId
     , command::RealmStatus cmd
     , std::function<void()> continuation
 ) {
-    constexpr char * const kHost { "eu.api.blizzard.com" };
-    constexpr char * const kService { "https" };
+    constexpr const char * const kHost { "eu.api.blizzard.com" };
+    constexpr const char * const kService { "https" };
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
@@ -362,8 +362,8 @@ void Blizzard::QueryRealmStatus(size_t realmId
 }
 
 void Blizzard::AcquireToken(std::function<void()> continuation) {
-    constexpr char * const kHost { "eu.battle.net" };
-    constexpr char * const kService { "https" };
+    constexpr const char * const kHost { "eu.battle.net" };
+    constexpr const char * const kService { "https" };
 
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
@@ -438,8 +438,6 @@ void Blizzard::Invoker::Execute(command::RealmID) {
 }
 
 void Blizzard::Invoker::Execute(command::Arena command) {
-    using Callback = std::function<void(const command::Arena&)>;
-
     auto handleResponse = [service = blizzard_](const command::Arena& cmd) {
         const auto& cache = service->arena_;
         assert(cache.IsValid());
@@ -477,8 +475,8 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         Console::Write("[blizzard] arena: [ initiator =",
              cmd.initiator_, ", channel =", cmd.channel_, "]\n");
 
-        constexpr char * const kHost { "eu.api.blizzard.com" };
-        constexpr char * const kService { "https" };
+        constexpr const char * const kHost { "eu.api.blizzard.com" };
+        constexpr const char * const kService { "https" };
         constexpr uint64_t kSeason { 1 };
         constexpr uint64_t kTeamSize { 2 };
 
