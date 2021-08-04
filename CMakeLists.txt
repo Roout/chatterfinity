@@ -84,8 +84,14 @@ target_compile_options(${This} PRIVATE
 set(Configs
   "crt/DigiCertHighAssuranceEVRootCA.crt.pem"
   "crt/StarfieldServicesRootCA.crt.pem"
-  "secret/services.json"
 )
+
+# used for CI
+if(NOT EXCLUDE_SECRET)
+  set(Configs "${Configs};secret/services.json")
+endif()
+
+message(STATUS "Config: ${Configs}")
 
 foreach(config ${Configs})
   message(STATUS "\t\tTrying to copy to */${config}")

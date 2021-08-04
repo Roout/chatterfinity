@@ -1,0 +1,53 @@
+name: Build
+
+on: [push, pull_request]
+
+env:
+  BUILD_TYPE: Release
+  BOOST_ROOT: ${{github.workspace}}/3rdparty/boost
+  BOOST_URL: https://sourceforge.net/projects/boost/files/boost/1.72.0/boost_1_72_0.tar.bz2/download
+
+jobs:
+  build-project:
+    runs-on: ubuntu-latest
+
+    steps:  
+    - uses: actions/checkout@v2  
+
+    - name: Restore Boost cache
+      uses: actions/cache@v2
+      id: cache-boost
+      with:
+        path: ${{env.BOOST_ROOT}}
+        key: boost
+
+    - name: Install Boost
+      if: steps.cache-boost.outputs.cache-hit != 'true'
+      run: |
+        if [ "$OS" == "Windows_NT" ]; then
+          # fix up paths to be forward slashes consistently
+          BOOST_ROOT=$(echo $BOOST_ROOT | sed 's/\\/\//g')
+        fi
+        mkdir -p $BOOST_ROOT
+        curl --progress-bar --location --output $BOOST_ROOT/download.tar.bz2 $BOOST_URL
+        7z -o$BOOST_ROOT x $BOOST_ROOT/download.tar.bz2 -y -bd
+        7z -o$BOOST_ROOT x $BOOST_ROOT/download.tar -y -bd
+        cd $BOOST_ROOT && cp -r boost_*/* .
+        rm -rf boost_*/* download.tar.bz2 download.tar
+      shell: bash
+    
+    - name: Create Build Environment
+      run: |
+        echo "BOOST_ROOT: $BOOST_ROOT"
+        echo "BOOST_INCLUDEDIR: $BOOST_INCLUDEDIR"
+        cmake -E make_directory ${{runner.workspace}}/build
+        
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{runner.workspace}}/build
+      run: cmake $GITHUB_WORKSPACE -DEXCLUDE_SECRET=ON -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+
+    - name: Build
+      working-directory: ${{runner.workspace}}/build
+      shell: bash
+      run: cmake --build . --config $BUILD_TYPE
