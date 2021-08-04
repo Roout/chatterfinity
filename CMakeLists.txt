@@ -54,6 +54,7 @@ add_definitions(
 	-DRAPIDJSON_NOMEMBERITERATORCLASS
 )
 
+find_package(Threads REQUIRED)
 find_package(Boost REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -70,6 +71,7 @@ target_include_directories(${This}
 )
 
 target_link_libraries(${This}
+    PRIVATE ${CMAKE_THREAD_LIBS_INIT}
     PRIVATE OpenSSL::SSL
     PRIVATE OpenSSL::Crypto
 )
