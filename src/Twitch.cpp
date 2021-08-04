@@ -125,7 +125,8 @@ void Twitch::HandleResponse(net::irc::Message message) {
                 std::transform(ircParams[kCommand].cbegin()
                     , ircParams[kCommand].cend()
                     , ircParams[kCommand].begin()
-                    , std::tolower);
+                    , [](unsigned char c) { return std::tolower(c); }
+                );
 
                 // skipped `kCommandSign`
                 auto twitchCommand { ShiftView(ircParams[kCommand], 1) };
