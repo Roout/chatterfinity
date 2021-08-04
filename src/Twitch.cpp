@@ -102,7 +102,9 @@ void Twitch::HandleResponse(net::irc::Message message) {
     enum { kChannel, kCommand, kRequiredFields };
 
     { // Debug:
-        std::string raw = "prefix: " + message.prefix_ 
+        std::string raw;
+        for (auto&& [key, val]: message.tags_) raw += key + "=" + val + ";";
+        raw += " prefix: " + message.prefix_ 
             + "; command: " + message.command_ + "; params:";
         for (auto& p: message.params_) raw += " " + p;
         Console::Write("[twitch] read:", raw, '\n');

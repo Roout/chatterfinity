@@ -56,11 +56,16 @@ namespace net {
 
         // [IRC](https://datatracker.ietf.org/doc/html/rfc1459.html#section-2.1)
         struct Message {
+            struct Tag {
+                std::string key_;
+                std::string value_;
+            };
             // The prefix, command, and all parameters are
             // separated by one (or more) ASCII space character(s) (0x20).
             static constexpr char kSpace = ' ';
             static constexpr std::string_view kCRLF = "\r\n";
-
+            
+            std::vector<Tag> tags_;
             std::string prefix_;
             std::string command_;
             std::vector<std::string> params_;
