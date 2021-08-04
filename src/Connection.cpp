@@ -206,9 +206,9 @@ void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
         }
     }
     else {
-        auto buf = outbox_.GetBufferSequence().front();
-        std::string dump((char*)buf.data(), buf.size());
-        log_->Write(LogType::kInfo, "sent", bytes, "bytes :", dump, "\n");
+        const auto buf = outbox_.GetBufferSequence().front();
+        std::string_view dump { static_cast<const char*>(buf.data()), buf.size() };
+        log_->Write(LogType::kInfo, "sent", bytes, "bytes :", utils::Trim(dump), "\n");
         if (outbox_.GetQueueSize()) {
             // there are a few messages scheduled to be sent
             log_->Write(LogType::kInfo, "queued messages:", outbox_.GetQueueSize(), "\n");
