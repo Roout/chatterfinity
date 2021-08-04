@@ -85,7 +85,7 @@ private:
 
 class Blizzard::Invoker {
 public:
-    Blizzard::Invoker(Blizzard *blizzard) : blizzard_ { blizzard } {}
+    Invoker(Blizzard *blizzard) : blizzard_ { blizzard } {}
 
     void Execute(command::RealmID);
     void Execute(command::RealmStatus);

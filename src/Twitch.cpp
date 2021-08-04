@@ -8,6 +8,8 @@
 #include "rapidjson/document.h"
 
 #include <algorithm>
+#include <stdexcept>
+#include <cctype>
 
 namespace {
     std::string ExtractBetween(const std::string& src, char left, char right) {
@@ -34,9 +36,9 @@ Twitch::Twitch(const Config *config, Container * outbox)
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
     , translator_ {}
-    , invoker_ { std::make_unique<Invoker>(this) }
     , config_ { config }
     , outbox_ { outbox }
+    , invoker_ { std::make_unique<Invoker>(this) }
 {
     assert(config_ && "Config is NULL");
     assert(outbox_ && "Queue is NULL");
@@ -123,7 +125,8 @@ void Twitch::HandleResponse(net::irc::Message message) {
                 std::transform(ircParams[kCommand].cbegin()
                     , ircParams[kCommand].cend()
                     , ircParams[kCommand].begin()
-                    , std::tolower);
+                    , [](unsigned char c) { return std::tolower(c); }
+                );
 
                 // skipped `kCommandSign`
                 auto twitchCommand { ShiftView(ircParams[kCommand], 1) };
@@ -183,7 +186,7 @@ void Twitch::Invoker::Execute(command::Validate) {
     const Config::Identity kIdentity { "twitch" };
     const auto secret = twitch_->GetConfig()->GetSecret(kIdentity);
     if (!secret) {
-        throw std::exception("Fail to create config");
+        throw std::runtime_error("Fail to create config");
     }
     auto onConnect = [request = twitch::Validation{ secret->token_ }.Build()
         , twitchService = twitch_

@@ -32,7 +32,7 @@ Header ParseHeader(std::string_view src) {
             statusLine.remove_prefix(last + kStatusDelimiter.size());
         }
     }
-    for (auto part: statusParts) {
+    for ([[maybe_unused]] auto part: statusParts) {
         assert(utils::Trim(part) == part && "Status parsing failed");
     }
 

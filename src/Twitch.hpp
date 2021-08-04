@@ -72,7 +72,7 @@ private:
 
 class Twitch::Invoker {
 public:
-    Twitch::Invoker(Twitch *twitch) : twitch_ { twitch } {}
+    Invoker(Twitch *twitch) : twitch_ { twitch } {}
 
     void Execute(command::Help);
     void Execute(command::Shutdown);

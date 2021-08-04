@@ -1,5 +1,7 @@
 # Chatterfinity
 
+![Linux](https://github.com/Roout/chatterfinity/actions/workflows/cmake.yml/badge.svg?branch=master)
+
 Chat bot provides in Twtich chat an information about arena leaderboard, server status, etc. Bot uses WOW Blizzard API.  
 Bot is in development. Some functionality will be added later.
 

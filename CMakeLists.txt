@@ -54,6 +54,7 @@ add_definitions(
 	-DRAPIDJSON_NOMEMBERITERATORCLASS
 )
 
+find_package(Threads REQUIRED)
 find_package(Boost REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -70,13 +71,14 @@ target_include_directories(${This}
 )
 
 target_link_libraries(${This}
+    PRIVATE ${CMAKE_THREAD_LIBS_INIT}
     PRIVATE OpenSSL::SSL
     PRIVATE OpenSSL::Crypto
 )
 
 target_compile_options(${This} PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:Clang>:-Wall -Werror -Wextra>>
-  $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:GNU>:-Wall -Werror -Wextra>>
+  $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:GNU>:-Wall -Werror -Wextra -Wno-error=class-memaccess>>
   $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:MSVC>:/W3>>
 )
 
@@ -84,8 +86,14 @@ target_compile_options(${This} PRIVATE
 set(Configs
   "crt/DigiCertHighAssuranceEVRootCA.crt.pem"
   "crt/StarfieldServicesRootCA.crt.pem"
-  "secret/services.json"
 )
+
+# used for CI
+if(NOT EXCLUDE_SECRET)
+  set(Configs "${Configs};secret/services.json")
+endif()
+
+message(STATUS "Config: ${Configs}")
 
 foreach(config ${Configs})
   message(STATUS "\t\tTrying to copy to */${config}")
