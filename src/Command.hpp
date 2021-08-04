@@ -22,7 +22,7 @@ namespace command {
     using Params = std::vector<std::string_view>;
 
     struct RealmID {
-        static RealmID Create(const service::Blizzard& ctx, const Params& params) {
+        static RealmID Create(const service::Blizzard&, const Params&) {
             return {};
         }
     };
@@ -47,28 +47,28 @@ namespace command {
     };
 
     struct AccessToken {
-        static AccessToken Create(const service::Blizzard& ctx, const Params& params) {
+        static AccessToken Create(const service::Blizzard&, const Params&) {
             return {};
         }
     };
 
     struct Shutdown {
-        static Shutdown Create(const service::Console& ctx, const Params& params) {
+        static Shutdown Create(const service::Console&, const Params&) {
             return {};
         }
     };
 
     struct Help {
-        static Help Create(const service::Console& ctx, const Params& params) {
+        static Help Create(const service::Console&, const Params&) {
             return {};
         }
-        static Help Create(const service::Twitch& ctx, const Params& params) {
+        static Help Create(const service::Twitch&, const Params&) {
             return {};
         }
     };
     
     struct Pong {
-        static Pong Create(const service::Twitch& ctx, const Params& params) {
+        static Pong Create(const service::Twitch&, const Params&) {
             return {};
         }
     };
@@ -94,7 +94,7 @@ namespace command {
     };
 
     struct Validate {
-        static Validate Create(const service::Twitch& ctx, const Params& params) {
+        static Validate Create(const service::Twitch&, const Params&) {
             return {};
         }
     };

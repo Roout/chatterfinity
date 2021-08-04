@@ -92,7 +92,7 @@ private:
     // enable/disable sentinel in CcQueue 
     static constexpr bool kSentinel { true };
     static constexpr std::size_t kWorkerCount { 2 };
-    static constexpr char * const kConfigPath { "secret/services.json" };
+    static constexpr const char * const kConfigPath { "secret/services.json" };
 
     std::vector<std::thread> workers_;
     // common queue
