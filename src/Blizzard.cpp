@@ -5,7 +5,7 @@
 #include "Connection.hpp"
 
 #include <iomanip> // std::quoted
-#include <exception>
+#include <stdexcept>
 #include <type_traits>
 
 #include "rapidjson/document.h"
@@ -378,7 +378,7 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
         const Config::Identity identity { "blizzard" };
         const auto secret = service->GetConfig()->GetSecret(identity);
         if (!secret) { 
-            throw std::exception("Cannot find a service with identity = blizzard");
+            throw std::runtime_error("Cannot find a service with identity = blizzard");
         }
         auto request = blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
         auto shared = connection.lock();

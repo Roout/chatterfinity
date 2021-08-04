@@ -8,6 +8,7 @@
 #include "rapidjson/document.h"
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace {
     std::string ExtractBetween(const std::string& src, char left, char right) {
@@ -183,7 +184,7 @@ void Twitch::Invoker::Execute(command::Validate) {
     const Config::Identity kIdentity { "twitch" };
     const auto secret = twitch_->GetConfig()->GetSecret(kIdentity);
     if (!secret) {
-        throw std::exception("Fail to create config");
+        throw std::runtime_error("Fail to create config");
     }
     auto onConnect = [request = twitch::Validation{ secret->token_ }.Build()
         , twitchService = twitch_
