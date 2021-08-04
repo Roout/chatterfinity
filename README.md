@@ -23,7 +23,7 @@ Bot is in development. Some functionality will be added later.
 
 ### Configuration
 
-- The example of the [services-example.json](secret/services.json) is provided. 
+- The example of the [services-example.json](secret/services.json) is provided.
 - You can get `client_id` and `secret` in [Twitch Developer Console](https://dev.twitch.tv/) and [Blizzard Developer Console](https://develop.battle.net/).
 - **Secret** is required only for Blizzard [Client Credential Flow](https://develop.battle.net/documentation/guides/using-oauth/client-credentials-flow) and **MUST NOT** be provided to any other party.  
 - You can get Twitch `token` running [local server](https://github.com/Roout/twitch-token) and opening it in browser at <http://localhost:3000>. More information is provided at the page of the [twitch-token generator](https://github.com/Roout/twitch-token).
@@ -86,6 +86,8 @@ Bot DOESN't consider twitch restrictions yet. Following restriction will be impl
 - Minimum 1 second delay between messages via IRC connection. For slow mode it can be greater.
 - 30 messages for 1 second
 - Authority e.g., subscriber mode, etc
+
+If IRC or HTTPS connection fails to connect/read/write it will try to reconnect 3 times with 2s, 4s, 8s timeouts. if you're not managing connection's lifetime by yourself it will be destroyed on failure to reconnect.
 
 ## Certificate Authorities
 
