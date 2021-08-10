@@ -1,6 +1,7 @@
 #include "Blizzard.hpp"
 #include "Console.hpp"
 #include "Config.hpp"
+#include "Utility.hpp"
 #include "Request.hpp"
 #include "Connection.hpp"
 
@@ -180,6 +181,8 @@ struct ArenaResponse final {
         return true;
     }
 };
+
+
 
 } // namespace {
 
@@ -446,12 +449,33 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         if (const auto& teams = cache.Get<ArenaResponse>()->teams; 
             teams.empty()
         ) {
-            message = "sorry, can't provide the answer. Try later please!";
+            message = "Sorry, can't provide the answer. Try later please!";
         }
         else {
-            message = to_string(teams.front());
-            Console::Write("[blizzard] arena teams:", teams.size()
-                , "; first 2x2 rating:", message, "\n");
+            // player name is not provided
+            if (!cmd.param_.empty()) {
+                auto it = std::find_if(teams.cbegin(), teams.cend(), 
+                    [&player = cmd.param_](const Team& team) {
+                        auto it = std::find_if(team.players.cbegin(), team.players.cend()
+                            , std::bind(utils::IsEqual, player, std::placeholders::_1));
+                        return it != team.players.cend();
+                    });
+                if (it == teams.cend()) {
+                    message = "Sorry, no team has a player with '" + cmd.param_ + "' nick!";
+                }
+                else {
+                    std::stringstream ss;
+                    ss << "Team: " << it->name << "; Rank: " << it->rank << "; Rating: " << it->rating << ".";
+                    message = ss.str();
+                }
+                Console::Write("[blizzard]:", message, "\n");
+            }
+            else {
+                // Create default message with top-1 team
+                message = to_string(teams.front());
+                Console::Write("[blizzard] arena teams:", teams.size()
+                    , "; first 2x2 rating:", message, "\n");
+            }
         }
 
         // TODO: update this temporary solution base on IF
@@ -473,7 +497,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         , callback = handleResponse]() 
     {
         Console::Write("[blizzard] arena: [ initiator =",
-             cmd.initiator_, ", channel =", cmd.channel_, "]\n");
+             cmd.initiator_, ", channel =", cmd.channel_, ", param =", cmd.param_, "]\n");
 
         constexpr const char * const kHost { "eu.api.blizzard.com" };
         constexpr const char * const kService { "https" };

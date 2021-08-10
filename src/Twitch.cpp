@@ -27,6 +27,7 @@ namespace {
         assert(shift < src.size());
         return { src.data() + shift, src.size() - shift};
     }
+
 }
 
 namespace service {
@@ -99,13 +100,13 @@ void Twitch::HandleResponse(net::irc::Message message) {
     using IrcCommands = net::irc::IrcCommands;
 
     constexpr IrcCommands ircCmds;
-    enum { kChannel, kCommand, kRequiredFields };
 
     { // Debug:
         std::string raw;
         for (auto&& [key, val]: message.tags_) raw += key + "=" + val + ";";
         raw += " prefix: " + message.prefix_ 
-            + "; command: " + message.command_ + "; params:";
+            + "; command: " + message.command_ 
+            + "; params (" + std::to_string(message.params_.size()) + "):";
         for (auto& p: message.params_) raw += " " + p;
         Console::Write("[twitch] read:", raw, '\n');
     }
@@ -115,33 +116,70 @@ void Twitch::HandleResponse(net::irc::Message message) {
 
     switch (*ircCmdKind) {
         case IrcCommands::kPrivMsg: {
+            enum { kChannel, kMessage, kRequiredFields };
+            static_assert(kMessage == 1, "According to IRC format message "
+                "for PRIVMSG command is always second parameter");
+
             // user command, not IRC command
             enum Sign : char { kChannelSign = '#', kCommandSign = '!'};
             auto& ircParams { message.params_ };
 
             // is user-defined command
-            if (ircParams.size() >= kRequiredFields
+            if (ircParams.size() == kRequiredFields
                 && ircParams[kChannel].front() == kChannelSign
-                && ircParams[kCommand].front() == kCommandSign
+                && ircParams[kMessage].front() == kCommandSign
             ) {
-                std::transform(ircParams[kCommand].cbegin()
-                    , ircParams[kCommand].cend()
-                    , ircParams[kCommand].begin()
+                // chat message is an input from the user in twitch chat
+                auto& chatMessage { ircParams[kMessage] };
+                std::transform(chatMessage.cbegin()
+                    , chatMessage.cend()
+                    , chatMessage.begin()
                     , [](unsigned char c) { return std::tolower(c); }
                 );
 
+                std::string_view unprocessed { chatMessage };
+                size_t chatCommandEnd = unprocessed.find_first_of(' ');
+                if (chatCommandEnd == std::string_view::npos) {
+                    chatCommandEnd = unprocessed.size();
+                }
+                // here we're still not sure whether it's a command or just a coincidence
+                const std::string_view chatCommand { unprocessed.data() + 1, chatCommandEnd - 1 };
+                unprocessed.remove_prefix(chatCommandEnd);
+
+                Console::Write("[twitch-debug] process possible command:", chatCommand, '\n');
                 // skipped `kCommandSign`
-                auto twitchCommand { ShiftView(ircParams[kCommand], 1) };
-                if (auto handle = translator_.GetHandle(twitchCommand); handle) {
+                if (auto handle = translator_.GetHandle(chatCommand); handle) {
                     // username (nick) has to be between (! ... @)
-                    auto user = ExtractBetween(message.prefix_, '!', '@');
+                    auto user = ::ExtractBetween(message.prefix_, '!', '@');
                     assert(!user.empty() && "wrong understanding of IRC format");
                     // skipped channel prefix: #
-                    auto twitchChannel { ShiftView(ircParams[kChannel], 1) };
+                    auto twitchChannel { ::ShiftView(ircParams[kChannel], 1) };
 
+                    // TODO: limit a number of params for chat-commands
+                    constexpr size_t kParamsLimit { 5 };
                     Translator::Params commandParams { twitchChannel, user };
-                    Console::Write("[twitch] command:", twitchCommand, 
-                        "; params:", commandParams[0], commandParams[1], '\n');
+                    // divide message to tokens (maybe parameters for the chat command)
+                    while (!unprocessed.empty() && commandParams.size() < kParamsLimit) {
+                        const auto start { unprocessed.find_first_not_of(' ') };
+                        assert(start != std::string_view::npos 
+                            && "Message can't consist only from spaces");
+                        unprocessed.remove_prefix(start);
+                        const auto wordEnd { unprocessed.find_first_of(' ') };
+                        if (wordEnd == std::string_view::npos) {
+                            // it's a last word
+                            commandParams.push_back(unprocessed);
+                            unprocessed = {}; 
+                        }
+                        else {
+                            commandParams.emplace_back(unprocessed.data(), wordEnd);
+                            unprocessed.remove_prefix(wordEnd + 1);
+                        }
+                    }
+
+                    std::string out;
+                    for (auto&&p: commandParams) out += std::string{ p } + " ";
+                    Console::Write("[twitch] params:", out, '\n');
+                    
                     std::invoke(*handle, commandParams);
                 }
             }
@@ -329,8 +367,10 @@ void Twitch::Invoker::Execute(command::Arena cmd) {
     assert(twitch_ && "Cannot be null");
     assert(twitch_->irc_ && "Cannot be null");
 
-    Console::Write("[twitch] execute arena command:", cmd.channel_, cmd.initiator_, '\n');
-    command::RawCommand raw { "arena", { std::move(cmd.channel_), std::move(cmd.initiator_) }};
+    Console::Write("[twitch] execute arena command:"
+        , cmd.channel_, cmd.initiator_,  cmd.param_, '\n');
+    command::RawCommand raw { "arena", 
+        { std::move(cmd.channel_), std::move(cmd.initiator_), std::move(cmd.param_) }};
     if (twitch_->outbox_->TryPush(std::move(raw))) {
         Console::Write("[twitch] push `arena` to queue\n");
     }

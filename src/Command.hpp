@@ -31,16 +31,17 @@ namespace command {
     // passed by Twitch service to Blizzard
     // executed by Blizzard service: acquire data from the remote server
     struct RealmStatus {
-        std::string channel_;  // used by twitch
-        std::string initiator_;  // used by twitch
+        std::string channel_;
+        std::string initiator_;
 
         static RealmStatus Create(const service::Blizzard& ctx, const Params& params);
         static RealmStatus Create(const service::Twitch& ctx, const Params& params);
     };
 
     struct Arena {
-        std::string channel_;  // used by twitch
-        std::string initiator_;  // used by twitch
+        std::string channel_;
+        std::string initiator_;
+        std::string param_;
 
         static Arena Create(const service::Blizzard& ctx, const Params& params);
         static Arena Create(const service::Twitch& ctx, const Params& params);

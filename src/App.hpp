@@ -69,9 +69,7 @@ public:
                     }
                     if (auto handle = translator_.GetHandle(cmd->command_); handle) {
                         std::invoke(*handle, std::vector<std::string_view> { 
-                            cmd->params_.begin(), 
-                            cmd->params_.end() 
-                        });
+                            cmd->params_.begin(), cmd->params_.end() });
                     }
                     else {
                         service::Console::Write("Can not recognize a command:", cmd->command_);
