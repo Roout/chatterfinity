@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <cstdint>
 #include <cctype> // std::tolower
+#include <locale>
 
 namespace utils {
     
@@ -32,6 +33,55 @@ namespace utils {
         bool isEqual = lhs.size() == rhs.size();
         for (size_t i = 0; isEqual && i < lhs.size(); i++) {
             isEqual = std::tolower(lhs[i]) == std::tolower(rhs[i]); 
+        }
+        return isEqual;
+    }
+
+    /**
+     * Compare for case insensitive equality of two utf8 byte strings.
+     * 
+     * Uses std::tolower with en_US.UTF-8 locale which
+     * returns the lowercase form of ch if one is listed in the locale, 
+     * otherwise return ch unchanged.
+     * 
+     * @note Only 1:1 character mapping can be performed by this function, 
+     * e.g. the Greek uppercase letter 'Σ' has two lowercase forms, 
+     * depending on the position in a word: 'σ' and 'ς'
+    */
+    inline bool IsEqualUtf8(std::string_view lhs, std::string_view rhs) {
+        if (lhs.size() != rhs.size()) return false;
+        if (lhs.empty()) return true;
+        
+        struct State {
+            std::string_view src; // source of input
+            std::mbstate_t state; // unique state required for `std::mbrtowc`
+
+            State(std::string_view arg) noexcept
+                : src { arg }
+                , state { std::mbstate_t() }
+            {}
+        };
+
+        static std::locale loc{ "en_US.UTF-8" };
+        State left{ lhs }, right{ rhs };
+        wchar_t leftChar, rightChar;
+        auto isEqual { true };
+        while (isEqual) {
+            const auto leftBytes = std::mbrtowc(&leftChar, left.src.data()
+                , left.src.size(), &left.state);
+            const auto rightBytes = std::mbrtowc(&rightChar, right.src.data()
+                , right.src.size(), &right.state);
+            isEqual = leftBytes == rightBytes;
+            
+            if (!leftBytes || leftBytes >= static_cast<size_t>(-2)) break;
+            if (!rightBytes || rightBytes >= static_cast<size_t>(-2)) break;
+
+            left.src.remove_prefix(leftBytes);
+            right.src.remove_prefix(rightBytes);
+
+            isEqual = isEqual && (
+                std::tolower(leftChar, loc) == std::tolower(rightChar, loc)
+            );
         }
         return isEqual;
     }
