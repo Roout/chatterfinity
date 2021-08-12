@@ -36,19 +36,20 @@ Commands can be invoked within either Console either Twitch chat. Chat messages 
 Commands which have already been implemented are quite crude without any customization and flexibility because they are used to test core of the bot now.  
 Bot talks in chat via [PRIVMSG](https://dev.twitch.tv/docs/irc/guide) IRC command.
 
-Bot supports UTF8 charset:
+Bot supports [UTF8](https://en.wikipedia.org/wiki/UTF-8) charset:
 
-- Windows (tested on Windows 10)
-- Linux (not tested yet)
+- Windows (can not print characters which required more than 2 code units (bytes) for encoding)
+- Linux (should work even with encoding which uses 4 code units (bytes))
 
 ### Twitch chat
 
 For now you can invoke the following custom commands within channel chat:
 
-| name           | description                                        |
-|----------------|----------------------------------------------------|
-| `!realm-status`| Show flamegor server status and queue information  |
-| `!arena`       | Show current top 1 of the EU region                |
+| Name           |  Params      | Description                                         |
+|----------------|--------------|-----------------------------------------------------|
+| `!realm-status`|              | Show flamegor server status and queue information   |
+| `!arena`       |              | Show current top 1 of the EU region                 |
+| `!arena`       | player_nick  | Show team name, rank, team rating                   |
 
 ### Console
 
