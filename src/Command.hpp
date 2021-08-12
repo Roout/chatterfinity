@@ -14,15 +14,39 @@ namespace service {
 
 namespace command {
 
+    template<class T>
+    struct Param { 
+        T key_;
+        T value_;
+    };
+    
+    // points to resource
+    using ParamView = Param<std::string_view>;
+    // owns resource
+    using ParamData = Param<std::string>;
+
+    using Args = std::vector<ParamView>;
+
+    // ExtractArgs line `src` for key-value pairs 
+    // 
+    // <code>
+    // std::string equal_delim { "!arena -season=\"1\" -empty= -players=2 -nick=\"шаркии\" -team=\"Эксодус\" -rank=6 -chuck=шаркии" };
+    // ExtractArgs(equal_delim,'=');
+    // std::string space_delim { "!chat -empty -channel    mainfinity   -message   \"Hello fuck\"" };
+    // ExtractArgs(space_delim,' ');
+    // </code>
+    // 
+    // value is not allowed to start with '-';
+    // if you need '-' use quotes
+    command::Args ExtractArgs(std::string_view src, char key_delimiter);
+
     struct RawCommand {
         std::string command_;
-        std::vector<std::string> params_;
+        std::vector<ParamData> params_;
     };
 
-    using Params = std::vector<std::string_view>;
-
     struct RealmID {
-        static RealmID Create(const service::Blizzard&, const Params&) {
+        static RealmID Create(const service::Blizzard&, const Args&) {
             return {};
         }
     };
@@ -32,44 +56,45 @@ namespace command {
     // executed by Blizzard service: acquire data from the remote server
     struct RealmStatus {
         std::string channel_;
-        std::string initiator_;
+        // initiator of the command
+        std::string user_;
 
-        static RealmStatus Create(const service::Blizzard& ctx, const Params& params);
-        static RealmStatus Create(const service::Twitch& ctx, const Params& params);
+        static RealmStatus Create(const service::Blizzard& ctx, const Args& params);
+        static RealmStatus Create(const service::Twitch& ctx, const Args& params);
     };
 
     struct Arena {
         std::string channel_;
-        std::string initiator_;
-        std::string param_;
+        std::string user_;
+        std::string player_;
 
-        static Arena Create(const service::Blizzard& ctx, const Params& params);
-        static Arena Create(const service::Twitch& ctx, const Params& params);
+        static Arena Create(const service::Blizzard& ctx, const Args& params);
+        static Arena Create(const service::Twitch& ctx, const Args& params);
     };
 
     struct AccessToken {
-        static AccessToken Create(const service::Blizzard&, const Params&) {
+        static AccessToken Create(const service::Blizzard&, const Args&) {
             return {};
         }
     };
 
     struct Shutdown {
-        static Shutdown Create(const service::Console&, const Params&) {
+        static Shutdown Create(const service::Console&, const Args&) {
             return {};
         }
     };
 
     struct Help {
-        static Help Create(const service::Console&, const Params&) {
+        static Help Create(const service::Console&, const Args&) {
             return {};
         }
-        static Help Create(const service::Twitch&, const Params&) {
+        static Help Create(const service::Twitch&, const Args&) {
             return {};
         }
     };
     
     struct Pong {
-        static Pong Create(const service::Twitch&, const Params&) {
+        static Pong Create(const service::Twitch&, const Args&) {
             return {};
         }
     };
@@ -78,24 +103,24 @@ namespace command {
         std::string channel_;
         std::string message_;
 
-        static Chat Create(const service::Twitch& ctx, const Params& params);
+        static Chat Create(const service::Twitch& ctx, const Args& params);
     };
 
     struct Join {
         // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
         std::string channel_;
 
-        static Join Create(const service::Twitch& ctx, const Params& params);
+        static Join Create(const service::Twitch& ctx, const Args& params);
     };
 
     struct Leave {
         std::string channel_;
 
-        static Leave Create(const service::Twitch& ctx, const Params& params);
+        static Leave Create(const service::Twitch& ctx, const Args& params);
     };
 
     struct Validate {
-        static Validate Create(const service::Twitch&, const Params&) {
+        static Validate Create(const service::Twitch&, const Args&) {
             return {};
         }
     };
@@ -104,7 +129,7 @@ namespace command {
         std::string user_;
         std::string token_;
 
-        static Login Create(const service::Twitch& ctx, const Params& params);
+        static Login Create(const service::Twitch& ctx, const Args& params);
     };
 
     namespace details {

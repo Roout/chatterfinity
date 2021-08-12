@@ -341,13 +341,15 @@ void Blizzard::QueryRealmStatus(size_t realmId
                 }
                 
                 // TODO: update this temporary solution base on IF
-                if (cmd.initiator_.empty()) { // the sourceof the command is 
+                if (cmd.user_.empty()) { // the sourceof the command is 
                     Console::Write("[blizzard] recv:", message, '\n');
                 }
                 else {
-                    message = "@" + cmd.initiator_ + ", " + message;
-                    command::RawCommand raw { "chat", { std::move(cmd.channel_)
-                        , std::move(message) } };
+                    message = "@" + cmd.user_ + ", " + message;
+                    command::RawCommand raw { "chat", { 
+                        command::ParamData { "channel", cmd.channel_ }
+                        , { "message", std::move(message) }}
+                    };
                     if (!service->outbox_->TryPush(std::move(raw))) {
                         Console::Write("[blizzard] fail to push !realm-status"
                             " response to queue: it is full\n");
@@ -453,19 +455,21 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         }
         else {
             // player name is not provided
-            if (!cmd.param_.empty()) {
+            if (!cmd.player_.empty()) {
                 auto it = std::find_if(teams.cbegin(), teams.cend(), 
-                    [&player = cmd.param_](const Team& team) {
+                    [&player = cmd.player_](const Team& team) {
                         auto it = std::find_if(team.players.cbegin(), team.players.cend()
                             , std::bind(utils::IsEqualUtf8, player, std::placeholders::_1));
                         return it != team.players.cend();
                     });
                 if (it == teams.cend()) {
-                    message = "Sorry, no team has a player with '" + cmd.param_ + "' nick!";
+                    message = "Sorry, no team has a player with '" + cmd.player_ + "' nick!";
                 }
                 else {
                     std::stringstream ss;
-                    ss << "Team: " << it->name << "; Rank: " << it->rank << "; Rating: " << it->rating << ".";
+                    ss << "Team: " << it->name 
+                        << "; Rank: " << it->rank 
+                        << "; Rating: " << it->rating << ".";
                     message = ss.str();
                 }
                 Console::Write("[blizzard]:", message, "\n");
@@ -479,11 +483,14 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         }
 
         // TODO: update this temporary solution base on IF
-        if (!cmd.initiator_.empty() && !cmd.channel_.empty()) {
-            message = "@" + cmd.initiator_ + ", " + message;
+        if (!cmd.user_.empty() && !cmd.channel_.empty()) {
+            message = "@" + cmd.user_ + ", " + message;
             Console::Write("[blizzard] send message:", message, "\n");
-            command::RawCommand raw { "chat"
-                , { cmd.channel_, std::move(message) }};
+
+            command::RawCommand raw { "chat", { 
+                command::ParamData { "channel", cmd.channel_ }
+                , { "message", std::move(message) }}
+            };
             
             if (!service->outbox_->TryPush(std::move(raw))) {
                 Console::Write("[blizzard] fail to push !arena "
@@ -497,7 +504,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         , callback = handleResponse]() 
     {
         Console::Write("[blizzard] arena: [ initiator =",
-             cmd.initiator_, ", channel =", cmd.channel_, ", param =", cmd.param_, "]\n");
+             cmd.user_, ", channel =", cmd.channel_, ", param =", cmd.player_, "]\n");
 
         constexpr const char * const kHost { "eu.api.blizzard.com" };
         constexpr const char * const kService { "https" };

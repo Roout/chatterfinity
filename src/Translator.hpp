@@ -6,9 +6,11 @@
 #include <unordered_map>
 #include <optional>
 
+#include "Command.hpp"
+
 class Translator {
 public:
-    using Params = std::vector<std::string_view>;
+    using Params = command::Args;
     using Handle = std::function<void(const Params&)>;
     using Pair   = std::pair<const std::string_view, Handle>;
 

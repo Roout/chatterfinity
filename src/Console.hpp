@@ -39,6 +39,9 @@ public:
     void Execute(Command&& cmd);
 
 private:
+
+    void Dispatch(std::string_view cmd, const command::Args& args);
+
     class Invoker;
 
     Container * const inbox_ { nullptr };
