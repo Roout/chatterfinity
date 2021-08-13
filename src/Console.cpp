@@ -46,8 +46,9 @@ Console::Console(Container * inbox)
     using namespace std::literals::string_view_literals;
 
     std::initializer_list<Translator::Pair> list {
-        { "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) },
-        { "help"sv,     Translator::CreateHandle<command::Help>(*this) }
+        { "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) }
+        , { "help"sv,     Translator::CreateHandle<command::Help>(*this) }
+        // , { "alias"sv,    Translator::CreateHandle<command::Alias>(*this) }
     };
     translator_.Insert(list);
 }
@@ -148,15 +149,8 @@ void Console::Run() {
         }
 
         command::Args params;
-        switch (sign) {
-            case '%': { // alias 
-                // TODO: transform alias to command
-                assert(false && "Not implemented");
-            } break;
-            case '!': { // command
-                params = command::ExtractArgs(input, ' ');
-            } break;
-            default: break;
+        if (sign == '!') {
+            params = command::ExtractArgs(input, ' ');
         }
 
         Dispatch(cmd, params);
@@ -205,9 +199,9 @@ void Console::Invoker::Execute(command::Help) {
         "  !realm-status - get status of the [flamegor] realm\n"
         "  !validate - validate token for twitch\n"
         "  !login - login twitch\n"
-        "  !join <channel> - join channel\n"
-        "  !chat <channel> \"<message>\" - send a message to chat of the specified channel\n"
-        "  !leave <channel> - leave joined channel\n"
+        "  !join -channel <channel_name> - join channel\n"
+        "  !chat -channel <channel_name> -message \"<message>\" - send a message to chat of the specified channel\n"
+        "  !leave -channel <channel_name> - leave joined channel\n"
     );
 }
 

@@ -19,6 +19,7 @@ list(APPEND headers
 	"src/Config.hpp"
 	"src/Translator.hpp"
 	"src/Command.hpp"
+	"src/Alias.hpp"
 	
 	"src/Console.hpp"
 	"src/Blizzard.hpp"

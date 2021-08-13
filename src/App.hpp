@@ -11,6 +11,7 @@
 #include "ConcurrentQueue.hpp"
 #include "Translator.hpp"
 #include "Config.hpp"
+#include "Alias.hpp"
 #include "Environment.hpp"
 // services:
 #include "Console.hpp"
@@ -27,6 +28,7 @@ public:
     App() 
         : commands_ { kSentinel }
         , config_ { kConfigPath }
+        , aliases_ {}
         , blizzard_ { std::make_shared<service::Blizzard>(&config_, &commands_) }
         , twitch_ { std::make_shared<service::Twitch>(&config_, &commands_) }
         , console_ { &commands_ }
@@ -48,6 +50,11 @@ public:
         };
         translator_.Insert(list);
     }
+
+    App(const App&) = delete;
+    App& operator= (const App&) = delete;
+    App(App&&) = delete;
+    App& operator= (App&&) = delete;
 
     ~App() {
         blizzard_->ResetWork();
@@ -102,6 +109,7 @@ private:
     Translator translator_;
     // configuration and settings
     Config config_;
+    command::AliasTable aliases_;
     // services:
     std::shared_ptr<service::Blizzard> blizzard_;
     std::shared_ptr<service::Twitch> twitch_;
