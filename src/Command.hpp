@@ -45,6 +45,14 @@ namespace command {
         std::vector<ParamData> params_;
     };
 
+    struct Alias {
+        std::string alias_;
+        std::string command_;
+        std::vector<ParamData> params_;
+
+        static Alias Create(const service::Console&, const Args&);
+    };
+
     struct RealmID {
         static RealmID Create(const service::Blizzard&, const Args&) {
             return {};
@@ -149,6 +157,7 @@ namespace command {
             static constexpr bool value { 
                 std::is_same_v<T, Shutdown>
                 || std::is_same_v<T, Help>
+                || std::is_same_v<T, Alias>
             };
         };
 

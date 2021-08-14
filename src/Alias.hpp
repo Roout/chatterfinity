@@ -48,7 +48,7 @@ public:
         aliases_.emplace_back(Bind{ alias, cmd, params });
     }
 
-    std::optional<CommandLine> GetCommand(const Alias& alias) {
+    std::optional<CommandLine> GetCommand(std::string_view alias) {
         auto it = std::find_if(aliases_.begin(), aliases_.end()
             , [&alias](const Bind& other) {
                 return other.alias == alias;

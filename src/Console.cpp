@@ -36,19 +36,21 @@ void PrintError() {
 
 namespace service {
 
-Console::Console(Container * inbox) 
+Console::Console(Container * inbox, command::AliasTable * aliases) 
     : inbox_ { inbox }
     , translator_ {}
+    , aliases_ { aliases }
     , invoker_ { std::make_unique<Invoker>(this) }
 {
     assert(inbox_ != nullptr);
+    assert(aliases_ != nullptr);
 
     using namespace std::literals::string_view_literals;
 
     std::initializer_list<Translator::Pair> list {
         { "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) }
         , { "help"sv,     Translator::CreateHandle<command::Help>(*this) }
-        // , { "alias"sv,    Translator::CreateHandle<command::Alias>(*this) }
+        , { "alias"sv,    Translator::CreateHandle<command::Alias>(*this) }
     };
     translator_.Insert(list);
 }
@@ -124,7 +126,6 @@ void Console::ReadLine(std::string& buffer) {
 
 #endif
 
-// blocks execution thread
 void Console::Run() {
     using namespace std::literals;
 
@@ -153,6 +154,23 @@ void Console::Run() {
             params = command::ExtractArgs(input, ' ');
         }
 
+        assert(aliases_);
+        auto referred = aliases_->GetCommand(cmd);
+        if (referred) {
+            Write("[console] used alias ", cmd, "refers to ", referred->command, '\n');
+            cmd = referred->command;
+            for (const auto& [k, v]: referred->params) {
+                const auto& key = k;
+                if (auto it = std::find_if(params.cbegin(), params.cend(), 
+                    [&key](const command::ParamView& data) {
+                        return data.key_ == key; 
+                    }); it == params.cend()
+                ) { // add param to param list if it's not already provided
+                    params.push_back(command::ParamView{ 
+                        std::string_view{ k }, std::string_view{ v } });
+                }
+            }
+        }       
         Dispatch(cmd, params);
        
         std::stringstream ss;
@@ -164,6 +182,7 @@ void Console::Run() {
 
 void Console::Dispatch(std::string_view cmd, const command::Args& args) {
     auto lowerCmd = utils::AsLowerCase(std::string{ cmd });
+
     if (auto handle = translator_.GetHandle(lowerCmd); handle) {
         Write("[console] call handle for:", lowerCmd, '\n');
         // proccess command here
@@ -181,6 +200,16 @@ void Console::Dispatch(std::string_view cmd, const command::Args& args) {
             // abandon the command
             Write("[console] fail to proccess command: command storage is full\n");
         }
+    }
+}
+
+void Console::Invoker::Execute(command::Alias cmd) {
+    assert(console_->aliases_ != nullptr);
+    if (auto handle = console_->translator_.GetHandle(cmd.alias_); !handle) {
+        console_->aliases_->Add(cmd.alias_, cmd.command_, cmd.params_);
+    }
+    else {
+        Write("[console] alias", cmd.alias_, "can't be created: it coincidened with existing command!");
     }
 }
 

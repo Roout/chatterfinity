@@ -504,7 +504,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         , callback = handleResponse]() 
     {
         Console::Write("[blizzard] arena: [ initiator =",
-             cmd.user_, ", channel =", cmd.channel_, ", param =", cmd.player_, "]\n");
+             cmd.user_, ", channel =", cmd.channel_, ", player =", cmd.player_, "]\n");
 
         constexpr const char * const kHost { "eu.api.blizzard.com" };
         constexpr const char * const kService { "https" };

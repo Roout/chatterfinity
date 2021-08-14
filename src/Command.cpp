@@ -75,6 +75,20 @@ namespace command {
         return result;
     }
 
+    Alias Alias::Create(const service::Console&, 
+        const Args& args
+    ) {
+        auto alias { ::Find(args, "alias") };
+        auto command { ::Find(args, "command") };
+        std::vector<ParamData> params;
+        params.reserve(args.size());
+        for (auto&& [k, v]: args) {
+            params.push_back(command::ParamData{ 
+                std::string(k), std::string(v) });
+        }
+        return { std::move(alias), std::move(command), std::move(params) };
+    }
+
     RealmStatus RealmStatus::Create(const service::Blizzard&,
         const Args& args
     ) {
