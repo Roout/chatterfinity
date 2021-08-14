@@ -30,7 +30,7 @@ public:
         , config_ { kConfigPath }
         , aliases_ {}
         , blizzard_ { std::make_shared<service::Blizzard>(&config_, &commands_) }
-        , twitch_ { std::make_shared<service::Twitch>(&config_, &commands_) }
+        , twitch_ { std::make_shared<service::Twitch>(&config_, &commands_, &aliases_) }
         , console_ { &commands_, &aliases_}
     {
         config_.Read();

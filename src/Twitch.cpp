@@ -4,6 +4,7 @@
 #include "Request.hpp"
 #include "Command.hpp"
 #include "Utility.hpp"
+#include "Alias.hpp"
 
 #include "rapidjson/document.h"
 
@@ -33,13 +34,17 @@ namespace {
 
 namespace service {
 
-Twitch::Twitch(const Config *config, Container * outbox) 
+Twitch::Twitch(const Config *config
+    , Container * outbox
+    , command::AliasTable * aliases
+) 
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
     , translator_ {}
     , config_ { config }
     , outbox_ { outbox }
+    , aliases_ { aliases }
     , invoker_ { std::make_unique<Invoker>(this) }
 {
     assert(config_ && "Config is NULL");
@@ -56,13 +61,13 @@ Twitch::Twitch(const Config *config, Container * outbox)
     }
 
     using namespace std::literals::string_view_literals;
-    std::initializer_list<Translator::Pair> list {
+    std::initializer_list<Translator::Pair> commands {
         { "help"sv,         Translator::CreateHandle<command::Help>(*this) },
         { "ping"sv,         Translator::CreateHandle<command::Pong>(*this) },
         { "arena"sv,        Translator::CreateHandle<command::Arena>(*this) },
         { "realm-status"sv, Translator::CreateHandle<command::RealmStatus>(*this) }
     };
-    translator_.Insert(list);
+    translator_.Insert(commands);
 }
 
 Twitch::~Twitch() {
@@ -147,8 +152,32 @@ void Twitch::HandleResponse(net::irc::Message message) {
                     chatCommandEnd = unprocessed.size();
                 }
                 // here we're still not sure whether it's a command or just a coincidence
-                const std::string_view chatCommand { unprocessed.data() + 1, chatCommandEnd - 1 };
+                std::string_view chatCommand { unprocessed.data() + 1, chatCommandEnd - 1 };
                 unprocessed.remove_prefix(chatCommandEnd + 1);
+                // divide message to tokens (maybe parameters for the chat command)
+                auto params = command::ExtractArgs(unprocessed, ' ');
+
+                // ====> Pass through Alias Table
+                assert(aliases_);
+                auto referred = aliases_->GetCommand(chatCommand);
+                if (referred) {
+                    Console::Write("[twitch] used alias "
+                        , chatCommand, "refers to "
+                        , referred->command, '\n');
+                    chatCommand = referred->command;
+                    for (const auto& [k, v]: referred->params) {
+                        const auto& key = k;
+                        if (auto it = std::find_if(params.cbegin(), params.cend(), 
+                            [&key](const command::ParamView& data) {
+                                return data.key_ == key; 
+                            }); it == params.cend()
+                        ) { // add param to param list if it's not already provided
+                            params.push_back(command::ParamView{ 
+                                std::string_view{ k }, std::string_view{ v } });
+                        }
+                    }
+                }       
+                // <====
 
                 Console::Write("[twitch-debug] process possible command:", chatCommand, '\n');
                 // skipped `kCommandSign`
@@ -162,8 +191,7 @@ void Twitch::HandleResponse(net::irc::Message message) {
                     command::Args commandParams { 
                         command::ParamView { "channel", twitchChannel },
                         command::ParamView { "user", user } };
-                    // divide message to tokens (maybe parameters for the chat command)
-                    auto params = command::ExtractArgs(unprocessed, ' ');
+
                     for (auto&& param: params) {
                         commandParams.push_back(param);
                     }
