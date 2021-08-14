@@ -120,6 +120,7 @@ void Twitch::HandleResponse(net::irc::Message message) {
     const auto ircCmdKind = ircCmds.Get(message.command_);
     if (!ircCmdKind) return;
 
+    // TODO: slice bloated switch
     switch (*ircCmdKind) {
         case IrcCommands::kPrivMsg: {
             enum { kChannel, kMessage, kRequiredFields };
@@ -157,10 +158,10 @@ void Twitch::HandleResponse(net::irc::Message message) {
                 // divide message to tokens (maybe parameters for the chat command)
                 auto params = command::ExtractArgs(unprocessed, ' ');
 
-                // ====> Pass through Alias Table
                 assert(aliases_);
+                // Substitute alias with command and required params if it's alias
                 auto referred = aliases_->GetCommand(chatCommand);
-                if (referred) {
+                if (referred) { 
                     Console::Write("[twitch] used alias "
                         , chatCommand, "refers to "
                         , referred->command, '\n');
@@ -171,13 +172,12 @@ void Twitch::HandleResponse(net::irc::Message message) {
                             [&key](const command::ParamView& data) {
                                 return data.key_ == key; 
                             }); it == params.cend()
-                        ) { // add param to param list if it's not already provided
+                        ) { // add param to param list if it's not already provided by user
                             params.push_back(command::ParamView{ 
                                 std::string_view{ k }, std::string_view{ v } });
                         }
                     }
                 }       
-                // <====
 
                 Console::Write("[twitch-debug] process possible command:", chatCommand, '\n');
                 // skipped `kCommandSign`

@@ -154,7 +154,9 @@ void Console::Run() {
             params = command::ExtractArgs(input, ' ');
         }
 
+        // TODO: remove code duplication: Twitch.cpp / Console.cpp
         assert(aliases_);
+        // Substitute alias with command and required params if it's alias
         auto referred = aliases_->GetCommand(cmd);
         if (referred) {
             Write("[console] used alias ", cmd, "refers to ", referred->command, '\n');
