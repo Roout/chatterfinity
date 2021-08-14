@@ -66,7 +66,7 @@ For now you can invoke the following custom commands within console:
 
 | Name           |  Params            | Description                                                        |
 |----------------|--------------------|--------------------------------------------------------------------|
-| `!realm-status`|                    | Show flamegor server status and queue information to console only  |
+| `!realm-status`|                    | Show flamegor server status and queue <br />information to console only  |
 | `!realm-id`    |                    | Show flamegor server id to console only                            |
 | `!arena`       |                    | Show current top 1 EU to console only                              |
 | `!login`       |                    | Login to the `irc.chat.twitch.tv:6697`                             |
@@ -75,7 +75,7 @@ For now you can invoke the following custom commands within console:
 | `!leave`       | -channel "chatroom"| Leave a chatroom                                                   |
 | `!pong`        |                    | Send pong to the `irc.chat.twitch.tv:6697`                         |
 | `!validate`    |                    | Validate the current twitch token                                  |
-| `!alias`       | -alias "alias_name" -command "command" -k1 v1 -k2 v2 (params required for command) | Add alias |
+| `!alias`       | -alias "alias_name" -command "command" <br />-k1 v1 -k2 v2 ... (other params) | Add alias |
 
 Alias can be added only within console.
 
