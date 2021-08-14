@@ -7,6 +7,7 @@
 #include "Translator.hpp"
 #include "ConcurrentQueue.hpp"
 #include "Environment.hpp"
+#include "Alias.hpp"
 
 namespace service {
 // This is source of input 
@@ -14,7 +15,7 @@ class Console {
 public:
     using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
 
-    Console(Container * inbox);
+    Console(Container * inbox, command::AliasTable * aliases);
 
     Console(const Console&) = delete;
     Console(Console&&) = delete;
@@ -39,10 +40,14 @@ public:
     void Execute(Command&& cmd);
 
 private:
+
+    void Dispatch(std::string_view cmd, const command::Args& args);
+
     class Invoker;
 
     Container * const inbox_ { nullptr };
     Translator translator_ {};
+    command::AliasTable * const aliases_ { nullptr };
 
     bool running_ { true };
 
@@ -58,7 +63,7 @@ public:
     Invoker(Console *console) : console_ { console } {}
 
     void Execute(command::Shutdown);
-    
+    void Execute(command::Alias);
     void Execute(command::Help);
 
 private:

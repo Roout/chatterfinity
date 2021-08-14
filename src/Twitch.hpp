@@ -14,6 +14,8 @@
 #include "Translator.hpp"
 #include "ConcurrentQueue.hpp"
 #include "Environment.hpp"
+#include "Command.hpp"
+#include "Alias.hpp"
 
 class IrcConnection;
 
@@ -28,7 +30,7 @@ class Twitch
 public:
     using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
 
-    Twitch(const Config *config, Container * outbox);
+    Twitch(const Config *config, Container * outbox, command::AliasTable * aliases);
     ~Twitch();
     Twitch(const Twitch&) = delete;
     Twitch(Twitch&&) = delete;
@@ -66,7 +68,8 @@ private:
     
     const Config * const config_ { nullptr };
     Container * const outbox_ { nullptr };
-    
+    command::AliasTable * const aliases_ { nullptr };
+
     std::unique_ptr<Invoker> invoker_;
 };
 

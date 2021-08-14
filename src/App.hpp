@@ -11,6 +11,7 @@
 #include "ConcurrentQueue.hpp"
 #include "Translator.hpp"
 #include "Config.hpp"
+#include "Alias.hpp"
 #include "Environment.hpp"
 // services:
 #include "Console.hpp"
@@ -27,9 +28,10 @@ public:
     App() 
         : commands_ { kSentinel }
         , config_ { kConfigPath }
+        , aliases_ {}
         , blizzard_ { std::make_shared<service::Blizzard>(&config_, &commands_) }
-        , twitch_ { std::make_shared<service::Twitch>(&config_, &commands_) }
-        , console_ { &commands_ }
+        , twitch_ { std::make_shared<service::Twitch>(&config_, &commands_, &aliases_) }
+        , console_ { &commands_, &aliases_}
     {
         config_.Read();
 
@@ -48,6 +50,11 @@ public:
         };
         translator_.Insert(list);
     }
+
+    App(const App&) = delete;
+    App& operator= (const App&) = delete;
+    App(App&&) = delete;
+    App& operator= (App&&) = delete;
 
     ~App() {
         blizzard_->ResetWork();
@@ -68,11 +75,15 @@ public:
                         break;
                     }
                     if (auto handle = translator_.GetHandle(cmd->command_); handle) {
-                        std::invoke(*handle, std::vector<std::string_view> { 
-                            cmd->params_.begin(), cmd->params_.end() });
+                        Translator::Params params;
+                        params.reserve(cmd->params_.size());
+                        for (auto&& [k, v]: cmd->params_) {
+                            params.emplace_back(command::ParamView{ k, v });
+                        }        
+                        std::invoke(*handle, params);
                     }
                     else {
-                        service::Console::Write("Can not recognize a command:", cmd->command_);
+                        service::Console::Write("Can not recognize a command:", cmd->command_, '\n');
                     }
                 }
             });
@@ -98,6 +109,7 @@ private:
     Translator translator_;
     // configuration and settings
     Config config_;
+    command::AliasTable aliases_;
     // services:
     std::shared_ptr<service::Blizzard> blizzard_;
     std::shared_ptr<service::Twitch> twitch_;

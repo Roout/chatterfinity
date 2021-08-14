@@ -45,11 +45,20 @@ Bot supports [UTF8](https://en.wikipedia.org/wiki/UTF-8) charset:
 
 For now you can invoke the following custom commands within channel chat:
 
-| Name           |  Params      | Description                                         |
-|----------------|--------------|-----------------------------------------------------|
-| `!realm-status`|              | Show flamegor server status and queue information   |
-| `!arena`       |              | Show current top 1 of the EU region                 |
-| `!arena`       | player_nick  | Show team name, rank, team rating                   |
+| Name           |  Params        | Description                                         |
+|----------------|----------------|-----------------------------------------------------|
+| `!realm-status`|                | Show flamegor server status and queue information   |
+| `!arena`       |                | Show current top 1 of the EU region                 |
+| `!arena`       | -player "nick" | Show team name, rank, team rating                   |
+
+You also can call alias within chat. But you can add alias only within console
+
+```bash
+# call already added beforehand alias
+!exodus
+# the output for alias above will be equal to output of the following arena command
+!arena -player "Шаркии"
+```
 
 ### Console
 
@@ -61,11 +70,30 @@ For now you can invoke the following custom commands within console:
 | `!realm-id`    |                    | Show flamegor server id to console only                            |
 | `!arena`       |                    | Show current top 1 EU to console only                              |
 | `!login`       |                    | Login to the `irc.chat.twitch.tv:6697`                             |
-| `!join`        | chatroom           | Join the chatroom                                                  |
-| `!chat`        | chatroom "message" | Send message to provided chat (message in "")                      |
-| `!leave`       | chatroom           | Leave a chatroom                                                   |
+| `!join`        | -channel "chatroom"| Join the chatroom                                                  |
+| `!chat`        | -channel "chatroom" -message "message" | Send message to provided chat (message in "")  |
+| `!leave`       | -channel "chatroom"| Leave a chatroom                                                   |
 | `!pong`        |                    | Send pong to the `irc.chat.twitch.tv:6697`                         |
 | `!validate`    |                    | Validate the current twitch token                                  |
+| `!alias`       | -alias "alias_name" -command "command" -k1 v1 -k2 v2 (params required for command) | Add alias |
+
+Alias can be added only within console.
+
+```bash
+# add alias for displaying arena team data
+!alias -alias exodus -command arena -player "Шаркии"
+# call alias within console or within twitch chat
+!exodus
+# the output for alias above will be equal to output of the following arena command
+!arena -player "Шаркии"
+```
+
+Aliases are being saved in alias.txt with executable. So they can be saved/soaded between sessions. You also can add alias manually there. But this may lead to errors e.g., coincidence of alias name and existing command name. If you do the same within console it won't add such alias.  
+
+**Not implemented:**
+
+- [ ] remove alias
+- [ ] print existing aliases
 
 ## Future features
 
@@ -75,7 +103,7 @@ For now you can invoke the following custom commands within console:
 - [ ] arena leaderboard:
   - [x] top 1 team of the provided realm
   - [ ] top 1 team of the provided region
-  - [ ] rating for the team by player name
+  - [x] rating for the team by player name from EU regin
   - [ ] win-lose statistics for the team by player name
 - [ ] auction (don't know whether it will be usefull)
 

@@ -4,12 +4,14 @@
 #include "Request.hpp"
 #include "Command.hpp"
 #include "Utility.hpp"
+#include "Alias.hpp"
 
 #include "rapidjson/document.h"
 
 #include <algorithm>
 #include <stdexcept>
 #include <cctype>
+#include <sstream>
 
 namespace {
     std::string ExtractBetween(const std::string& src, char left, char right) {
@@ -32,13 +34,17 @@ namespace {
 
 namespace service {
 
-Twitch::Twitch(const Config *config, Container * outbox) 
+Twitch::Twitch(const Config *config
+    , Container * outbox
+    , command::AliasTable * aliases
+) 
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
     , translator_ {}
     , config_ { config }
     , outbox_ { outbox }
+    , aliases_ { aliases }
     , invoker_ { std::make_unique<Invoker>(this) }
 {
     assert(config_ && "Config is NULL");
@@ -55,13 +61,13 @@ Twitch::Twitch(const Config *config, Container * outbox)
     }
 
     using namespace std::literals::string_view_literals;
-    std::initializer_list<Translator::Pair> list {
+    std::initializer_list<Translator::Pair> commands {
         { "help"sv,         Translator::CreateHandle<command::Help>(*this) },
         { "ping"sv,         Translator::CreateHandle<command::Pong>(*this) },
         { "arena"sv,        Translator::CreateHandle<command::Arena>(*this) },
         { "realm-status"sv, Translator::CreateHandle<command::RealmStatus>(*this) }
     };
-    translator_.Insert(list);
+    translator_.Insert(commands);
 }
 
 Twitch::~Twitch() {
@@ -114,12 +120,16 @@ void Twitch::HandleResponse(net::irc::Message message) {
     const auto ircCmdKind = ircCmds.Get(message.command_);
     if (!ircCmdKind) return;
 
+    // TODO: slice bloated switch
     switch (*ircCmdKind) {
         case IrcCommands::kPrivMsg: {
             enum { kChannel, kMessage, kRequiredFields };
             static_assert(kMessage == 1, "According to IRC format message "
                 "for PRIVMSG command is always second parameter");
 
+            // TODO: either add alias sign 
+            // either use ! as sign for both alias and original command
+            
             // user command, not IRC command
             enum Sign : char { kChannelSign = '#', kCommandSign = '!'};
             auto& ircParams { message.params_ };
@@ -143,8 +153,31 @@ void Twitch::HandleResponse(net::irc::Message message) {
                     chatCommandEnd = unprocessed.size();
                 }
                 // here we're still not sure whether it's a command or just a coincidence
-                const std::string_view chatCommand { unprocessed.data() + 1, chatCommandEnd - 1 };
-                unprocessed.remove_prefix(chatCommandEnd);
+                std::string_view chatCommand { unprocessed.data() + 1, chatCommandEnd - 1 };
+                unprocessed.remove_prefix(chatCommandEnd + 1);
+                // divide message to tokens (maybe parameters for the chat command)
+                auto params = command::ExtractArgs(unprocessed, ' ');
+
+                assert(aliases_);
+                // Substitute alias with command and required params if it's alias
+                auto referred = aliases_->GetCommand(chatCommand);
+                if (referred) { 
+                    Console::Write("[twitch] used alias "
+                        , chatCommand, "refers to "
+                        , referred->command, '\n');
+                    chatCommand = referred->command;
+                    for (const auto& [k, v]: referred->params) {
+                        const auto& key = k;
+                        if (auto it = std::find_if(params.cbegin(), params.cend(), 
+                            [&key](const command::ParamView& data) {
+                                return data.key_ == key; 
+                            }); it == params.cend()
+                        ) { // add param to param list if it's not already provided by user
+                            params.push_back(command::ParamView{ 
+                                std::string_view{ k }, std::string_view{ v } });
+                        }
+                    }
+                }       
 
                 Console::Write("[twitch-debug] process possible command:", chatCommand, '\n');
                 // skipped `kCommandSign`
@@ -155,30 +188,17 @@ void Twitch::HandleResponse(net::irc::Message message) {
                     // skipped channel prefix: #
                     auto twitchChannel { ::ShiftView(ircParams[kChannel], 1) };
 
-                    // TODO: limit a number of params for chat-commands
-                    constexpr size_t kParamsLimit { 5 };
-                    Translator::Params commandParams { twitchChannel, user };
-                    // divide message to tokens (maybe parameters for the chat command)
-                    while (!unprocessed.empty() && commandParams.size() < kParamsLimit) {
-                        const auto start { unprocessed.find_first_not_of(' ') };
-                        assert(start != std::string_view::npos 
-                            && "Message can't consist only from spaces");
-                        unprocessed.remove_prefix(start);
-                        const auto wordEnd { unprocessed.find_first_of(' ') };
-                        if (wordEnd == std::string_view::npos) {
-                            // it's a last word
-                            commandParams.push_back(unprocessed);
-                            unprocessed = {}; 
-                        }
-                        else {
-                            commandParams.emplace_back(unprocessed.data(), wordEnd);
-                            unprocessed.remove_prefix(wordEnd + 1);
-                        }
+                    command::Args commandParams { 
+                        command::ParamView { "channel", twitchChannel },
+                        command::ParamView { "user", user } };
+
+                    for (auto&& param: params) {
+                        commandParams.push_back(param);
                     }
 
-                    std::string out;
-                    for (auto&&p: commandParams) out += std::string{ p } + " ";
-                    Console::Write("[twitch] params:", out, '\n');
+                    std::stringstream ss;
+                    for (auto&& [k, v]: params) ss << k << " " << v << ' '; 
+                    Console::Write("[twitch] params:", ss.str(), '\n');
                     
                     std::invoke(*handle, commandParams);
                 }
@@ -353,8 +373,11 @@ void Twitch::Invoker::Execute(command::RealmStatus cmd) {
     assert(twitch_ && "Cannot be null");
     assert(twitch_->irc_ && "Cannot be null");
 
-    Console::Write("[twitch] execute realm-status command:", cmd.channel_, cmd.initiator_, '\n');
-    command::RawCommand raw { "realm-status", { std::move(cmd.channel_), std::move(cmd.initiator_) }};
+    Console::Write("[twitch] execute realm-status command:", cmd.channel_, cmd.user_, '\n');
+    command::RawCommand raw { "realm-status", { 
+        command::ParamData { "channel", std::move(cmd.channel_) }
+        , { "user", std::move(cmd.user_) } }
+    };
     if (twitch_->outbox_->TryPush(std::move(raw))) {
         Console::Write("[twitch] push `RealmStatus` to queue\n");
     }
@@ -368,9 +391,14 @@ void Twitch::Invoker::Execute(command::Arena cmd) {
     assert(twitch_->irc_ && "Cannot be null");
 
     Console::Write("[twitch] execute arena command:"
-        , cmd.channel_, cmd.initiator_,  cmd.param_, '\n');
-    command::RawCommand raw { "arena", 
-        { std::move(cmd.channel_), std::move(cmd.initiator_), std::move(cmd.param_) }};
+        , cmd.channel_, cmd.user_,  cmd.player_, '\n');
+
+    command::RawCommand raw { "arena", { 
+        command::ParamData { "channel", std::move(cmd.channel_) }
+        , { "user", std::move(cmd.user_) } 
+        , { "player", std::move(cmd.player_) } }
+    };
+
     if (twitch_->outbox_->TryPush(std::move(raw))) {
         Console::Write("[twitch] push `arena` to queue\n");
     }

@@ -2,13 +2,16 @@
 #include "Utility.hpp"
 #include "Environment.hpp"
 
+#include <sstream>
+
 #include <cassert>
 #ifdef _WIN32
 #include <Windows.h>
 #endif
 
-#ifdef _WIN32
 namespace {
+
+#ifdef _WIN32
 
 void PrintError() {
     const DWORD id = ::GetLastError();
@@ -27,23 +30,27 @@ void PrintError() {
     LocalFree(buffer);
 }
 
-} // namespace {
 #endif
+
+} // namespace {
 
 namespace service {
 
-Console::Console(Container * inbox) 
+Console::Console(Container * inbox, command::AliasTable * aliases) 
     : inbox_ { inbox }
     , translator_ {}
+    , aliases_ { aliases }
     , invoker_ { std::make_unique<Invoker>(this) }
 {
     assert(inbox_ != nullptr);
+    assert(aliases_ != nullptr);
 
     using namespace std::literals::string_view_literals;
 
     std::initializer_list<Translator::Pair> list {
-        { "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) },
-        { "help"sv,     Translator::CreateHandle<command::Help>(*this) }
+        { "shutdown"sv, Translator::CreateHandle<command::Shutdown>(*this) }
+        , { "help"sv,     Translator::CreateHandle<command::Help>(*this) }
+        , { "alias"sv,    Translator::CreateHandle<command::Alias>(*this) }
     };
     translator_.Insert(list);
 }
@@ -119,69 +126,92 @@ void Console::ReadLine(std::string& buffer) {
 
 #endif
 
-// blocks execution thread
 void Console::Run() {
     using namespace std::literals;
 
-    static constexpr std::string_view kDelimiter { " " };
     std::string buffer;
     while (running_) {
         ReadLine(buffer);
-        std::string_view input { buffer };
-        input = utils::Trim(input);
+        auto input { utils::Trim(buffer) };
+        if (input.empty()) continue;
         // parse buffer
-        std::vector<std::string_view> args;
-        auto delimiter = input.find(kDelimiter);
-        while (delimiter != std::string_view::npos) {
-            bool isQuoted = false;
-            if (input.front() == '"') {
-                if (auto end = input.find('"', 1); // ignore first character which may be ["]
-                    end != std::string_view::npos)
-                {
-                    // TODO: handle messages without space after ["]: "some long message" no space after; 
-                    delimiter = end;
-                    isQuoted = true;
-                }
-            }
-            const size_t ignored = isQuoted? 1: 0;
-            args.emplace_back(input.data() + ignored, delimiter - ignored);
-            // remove prefix with delimiter
-            input.remove_prefix(delimiter + 1);
-            // remove all special characters from the input
-            input = utils::Trim(input);
-            // update delimiter position
-            delimiter = input.find(kDelimiter);
-        }
-        if (!input.empty()) {
-            args.emplace_back(input);
-        }
-        
-        assert(!args.empty() && "Args list can't be empty");
+        auto sign = input.front();
+        input.remove_prefix(1);
 
-        if (!args.front().empty()) {
-            args.front().remove_prefix(1);
-        }
-
-        if (auto handle = translator_.GetHandle(args.front()); handle) {
-            Write("[console] call handle for:", args.front(), '\n');
-            // proccess command here
-            std::invoke(*handle, Translator::Params{++args.begin(), args.end()});
+        std::string_view cmd;
+        if (auto space = input.find_first_of(' '); 
+            space == std::string_view::npos
+        ) {
+            cmd = input;
         }
         else {
-            // can not recognize the command, pass it to other services
-            command::RawCommand raw  { 
-                std::string { args.front() }, 
-                std::vector<std::string>{ ++args.begin(), args.end() }
-            };
-            if (!inbox_->TryPush(std::move(raw))) {
-                // abandon the command
-                Write("[console] fail to proccess command: command storage is full\n");
-            }
+            cmd = input.substr(0, space);
+            input.remove_prefix(space + 1);
         }
 
-        std::string merged;
-        for (auto&&arg: args) merged += std::string(arg) + " "; 
-        Write("[console] parsed: [ ", merged, "]\n");
+        command::Args params;
+        if (sign == '!') {
+            params = command::ExtractArgs(input, ' ');
+        }
+
+        // TODO: remove code duplication: Twitch.cpp / Console.cpp
+        assert(aliases_);
+        // Substitute alias with command and required params if it's alias
+        auto referred = aliases_->GetCommand(cmd);
+        if (referred) {
+            Write("[console] used alias ", cmd, "refers to ", referred->command, '\n');
+            cmd = referred->command;
+            for (const auto& [k, v]: referred->params) {
+                const auto& key = k;
+                if (auto it = std::find_if(params.cbegin(), params.cend(), 
+                    [&key](const command::ParamView& data) {
+                        return data.key_ == key; 
+                    }); it == params.cend()
+                ) { // add param to param list if it's not already provided
+                    params.push_back(command::ParamView{ 
+                        std::string_view{ k }, std::string_view{ v } });
+                }
+            }
+        }       
+        Dispatch(cmd, params);
+       
+        std::stringstream ss;
+        ss << cmd << ' ';
+        for (auto&& [k, v]: params) ss << k << " " << v << ' '; 
+        Write("[console] parsed: [ ", ss.str(), "]\n");
+    }
+}
+
+void Console::Dispatch(std::string_view cmd, const command::Args& args) {
+    auto lowerCmd = utils::AsLowerCase(std::string{ cmd });
+
+    if (auto handle = translator_.GetHandle(lowerCmd); handle) {
+        Write("[console] call handle for:", lowerCmd, '\n');
+        // proccess command here
+        std::invoke(*handle, args);
+    }
+    else {
+        // can not recognize the command, pass it to other services
+        std::vector<command::ParamData> params;
+        params.reserve(args.size());
+        for (auto&& [k, v]: args) {
+            params.push_back(command::ParamData{ std::string(k), std::string(v) });
+        }        
+        command::RawCommand raw { std::move(lowerCmd), std::move(params) };
+        if (!inbox_->TryPush(std::move(raw))) {
+            // abandon the command
+            Write("[console] fail to proccess command: command storage is full\n");
+        }
+    }
+}
+
+void Console::Invoker::Execute(command::Alias cmd) {
+    assert(console_->aliases_ != nullptr);
+    if (auto handle = console_->translator_.GetHandle(cmd.alias_); !handle) {
+        console_->aliases_->Add(cmd.alias_, cmd.command_, cmd.params_);
+    }
+    else {
+        Write("[console] alias", cmd.alias_, "can't be created: it coincidened with existing command!");
     }
 }
 
@@ -200,9 +230,9 @@ void Console::Invoker::Execute(command::Help) {
         "  !realm-status - get status of the [flamegor] realm\n"
         "  !validate - validate token for twitch\n"
         "  !login - login twitch\n"
-        "  !join <channel> - join channel\n"
-        "  !chat <channel> \"<message>\" - send a message to chat of the specified channel\n"
-        "  !leave <channel> - leave joined channel\n"
+        "  !join -channel <channel_name> - join channel\n"
+        "  !chat -channel <channel_name> -message \"<message>\" - send a message to chat of the specified channel\n"
+        "  !leave -channel <channel_name> - leave joined channel\n"
     );
 }
 
