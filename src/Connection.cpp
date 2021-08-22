@@ -24,9 +24,6 @@ Connection::Connection(SharedIOContext context
     , log_ { std::make_shared<Log>((boost::format("%1%_%2%_%3%.txt") % host % service % id).str().data()) }
     , isWriting_ { false }
 {
-    // setup verification process settings
-    socket_->set_verify_mode(ssl::verify_peer);
-    socket_->set_verify_callback(ssl::rfc2818_verification(host.data()));
 }
 
 Connection::~Connection() { 
@@ -98,6 +95,18 @@ void Connection::OnResolve(const boost::system::error_code& error
         }
     }
     else {
+        // configure socket
+        // 1. setup verification process settings
+        socket_->set_verify_mode(ssl::verify_peer);
+        socket_->set_verify_callback(ssl::rfc2818_verification(host_.data()));
+ 
+        // 2. set SNI Hostname (many hosts need this to handshake successfully)
+        // https://github.com/chriskohlhoff/asio/issues/262
+        if (!SSL_set_tlsext_host_name(socket_->native_handle(), host_.data())){
+            boost::system::error_code ec{ static_cast<int>(::ERR_get_error()), boost::asio::error::get_ssl_category() };
+            throw boost::system::system_error{ ec };
+        }
+
         boost::asio::async_connect(socket_->lowest_layer()
             , results
             , boost::asio::bind_executor(strand_
