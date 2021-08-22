@@ -28,6 +28,7 @@ list(APPEND headers
 
 	"src/ConcurrentQueue.hpp"
 	"src/SwitchBuffer.hpp"
+	"src/Chain.hpp"
 )
 	
 list(APPEND sources 
@@ -36,6 +37,7 @@ list(APPEND sources
 	"src/Request.cpp"
 	"src/Response.cpp"
 	"src/Config.cpp"
+	"src/Chain.cpp"
 	
 	"src/Console.cpp"
 	"src/Blizzard.cpp"
