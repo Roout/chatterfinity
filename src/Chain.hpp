@@ -6,8 +6,12 @@
 #include <boost/asio.hpp>
 
 /**
- * Chain MUST NOT (and IS NOT) observed by more than 1 thread at once
- * TODO: remove already completed tasks from the chain
+ * It's guranteed that the tasks will be executed in queue - FIFO.
+ * The next task can not start executing earlier 
+ * than the current's task callback is called.
+ * 
+ * Chain stores all tasks + callbacks
+ * Chain is not observed by more than one thread at once
  */
 class Chain : public std::enable_shared_from_this<Chain> {
 public:
