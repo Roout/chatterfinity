@@ -53,15 +53,7 @@ bool Copy(const rapidjson::Value& src, T& dst, const char *key) {
     return false;
 }
 
-template<class Encoding, class Allocator>
-std::string Serialize(const rapidjson::GenericValue<Encoding, Allocator>& value) {
-    rapidjson::StringBuffer buffer;
-    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-    value.Accept(writer);
-    return { buffer.GetString(), buffer.GetSize() };
-}
-
-struct RealmStatusResponse final {
+struct RealmStatusResponse {
     std::string name;
     std::string queue;
     std::string status;
@@ -69,20 +61,29 @@ struct RealmStatusResponse final {
     bool Parse(const std::string& buffer) {
         rapidjson::Document json; 
         json.Parse(buffer.data(), buffer.size());
-        if (!json.HasMember("realms")) return false;
+        if (!json.HasMember("realms")) { 
+            return false;
+        }
         const auto realms = json["realms"].GetArray();
         assert(!realms.Empty() && "Empty realms");
 
-        // TODO: don't take just first value
+        // TODO: check whether the first realm is always 
+        // the one we needed
         const auto& front = *realms.Begin();
-        if (!front.HasMember("name")) return false;
+        if (!front.HasMember("name")) { 
+            return false;
+        }
         name = front["name"].GetString();
 
-        if (!json.HasMember("has_queue")) return false;
+        if (!json.HasMember("has_queue")) { 
+            return false;
+        }
         const auto hasQueue = json["has_queue"].GetBool();
         queue = hasQueue? "has queue": "no queue";
 
-        if (!json.HasMember("status") || !json["status"].HasMember("type")) return false;
+        if (!json.HasMember("status") || !json["status"].HasMember("type")) { 
+            return false;
+        }
         status = json["status"]["type"].GetString();
 
         return true;
@@ -94,7 +95,7 @@ std::string to_string(const RealmStatusResponse& realm) {
     return realm.name + "(" + realm.status + "): " + realm.queue;
 }
 
-struct TokenResponse final {
+struct TokenResponse {
     std::string content;
     std::string type;
     std::uint64_t expires;
@@ -103,9 +104,15 @@ struct TokenResponse final {
         rapidjson::Document json; 
         json.Parse(buffer.data(), buffer.size());
 
-        if (!::Copy(json, content, "access_token")) return false;
-        if (!::Copy(json, type, "token_type")) return false;
-        if (!::Copy(json, expires, "expires_in")) return false;
+        if (!::Copy(json, content, "access_token")) {
+            return false;
+        }
+        if (!::Copy(json, type, "token_type")) {
+            return false;
+        }
+        if (!::Copy(json, expires, "expires_in")) {
+            return false;
+        }
 
         assert(type == "bearer" 
             && "Unexpected token type. Blizzard API may be changed!");
@@ -132,11 +139,13 @@ std::string to_string(const Team& team) {
     ss << std::quoted(team.name, '\'') << " " << team.realm << " " 
         << std::to_string(team.rank) << " " << std::to_string(team.rating) << " "
         << std::to_string(team.players.size()) << ":";
-    for (const auto& player: team.players) ss << " " << std::quoted(player, '\'');
+    for (const auto& player: team.players) {
+        ss << " " << std::quoted(player, '\'');
+    }
     return ss.str();
 }
 
-struct ArenaResponse final {
+struct ArenaResponse {
     std::vector<Team> teams;
 
     bool Parse(const std::string& buffer) {
@@ -144,40 +153,64 @@ struct ArenaResponse final {
         json.Parse(buffer.data(), buffer.size());
 
         auto entries_it = json.FindMember("entries");
-        if (entries_it == json.MemberEnd()) return false;
+        if (entries_it == json.MemberEnd()) {
+            return false;
+        }
         const auto& entries = entries_it->value.GetArray();
         for (auto&& entry: entries) {
             Team team;
-            if (!::Copy(entry, team.rank, "rank")) return false;
-            if (!::Copy(entry, team.rating, "rating")) return false;
+            if (!::Copy(entry, team.rank, "rank")) {
+                return false;
+            }
+            if (!::Copy(entry, team.rating, "rating")) {
+                return false;
+            }
 
             auto team_it = entry.FindMember("team");
-            if (team_it == entry.MemberEnd()) return false;
+            if (team_it == entry.MemberEnd()) {
+                return false;
+            }
             const auto& teamValue = team_it->value;
-            { // team : {
-                if (!::Copy(teamValue, team.name, "name")) return false;
-            
-                { // realm : {
-                    auto realm_it = teamValue.FindMember("realm");
-                    if (realm_it == teamValue.MemberEnd()) return false;
-                    if (!::Copy(realm_it->value, team.realm, "slug")) return false;
-                } // } realm
-
-                auto members_it = teamValue.FindMember("members");
-                if (members_it != teamValue.MemberEnd()) { // members: { 
-                    const auto& members = members_it->value.GetArray();
-                    
-                    team.players.resize(members.Size());
-                    size_t i = 0;
-                    for (auto&& player: members) {
-                        auto character_it = player.FindMember("character");
-                        if (character_it == player.MemberEnd()) return false;
-                        if (!::Copy(character_it->value, team.players[i], "name")) return false;
-                        ++i;
-                    }
-                } // } members 
-            } // } team
+            if (!ParseTeam(teamValue, team)) {
+                return false;
+            }
             teams.emplace_back(std::move(team));
+        }
+        return true;
+    }
+
+private:
+    bool ParseTeam(const rapidjson::Value& teamValue, Team& team) {
+        if (!::Copy(teamValue, team.name, "name")) {
+            return false;
+        }
+        // realm
+        auto realm_it = teamValue.FindMember("realm");
+        if (realm_it == teamValue.MemberEnd()) {
+            return false;
+        }
+        if (!::Copy(realm_it->value, team.realm, "slug")) {
+            return false;
+        }
+        // members
+        auto members_it = teamValue.FindMember("members");
+        if (members_it == teamValue.MemberEnd()) {
+            // team has no members
+            return true;
+        }
+        const auto& members = members_it->value.GetArray();
+        
+        team.players.resize(members.Size());
+        size_t i = 0;
+        for (auto&& player: members) {
+            auto character_it = player.FindMember("character");
+            if (character_it == player.MemberEnd()) {
+                return false;
+            }
+            if (!::Copy(character_it->value, team.players[i], "name")) {
+                return false;
+            }
+            ++i;
         }
         return true;
     }
@@ -205,14 +238,14 @@ Blizzard::Blizzard(const Config *config, Container * outbox)
     boost::system::error_code error;
     ssl_->load_verify_file(kVerifyFilePath, error);
     if (error) {
-        Console::Write("[blizzard] [ERROR]:", error.message(), '\n');
+        Console::Write("[blizzard] --error:", error.message(), '\n');
     }
 }
 
 Blizzard::~Blizzard() {
     Console::Write("  -> close blizzard service\n");
-    // TODO: 
-    // - [ ] close io_context? context_->stop();
+    // TODO: decide whether I should stop io_context or not?
+    // context_->stop();
     for (auto& t: threads_) t.join();
 }
 
@@ -229,8 +262,9 @@ void Blizzard::Run() {
                     break;
                 }
                 catch (std::exception& ex) {
-                    // some system exception
-                    Console::Write("[ERROR]: ", ex.what(), '\n');
+                    Console::Write(
+                        "[blizzard]: --error: context raises an exceptiom:"
+                        , ex.what(), '\n');
                 }
             }
         });
@@ -244,8 +278,8 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
-    assert(token_.IsValid());
 
+    assert(token_.IsValid());
     auto request = blizzard::Realm{ *token_.Get<std::string>() }.Build();
 
     auto readCallback = [weak = utils::WeakFrom<HttpConnection>(connection)
@@ -268,8 +302,8 @@ void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     auto connect = [connection](Chain::Callback cb) {
         connection->Connect(std::move(cb));
     };
-    auto write = [connection, request = std::move(request)](Chain::Callback cb) {
-        connection->ScheduleWrite(std::move(request), std::move(cb));
+    auto write = [connection, req = std::move(request)](Chain::Callback cb) {
+        connection->ScheduleWrite(std::move(req), std::move(cb));
     };
     auto read = [connection](Chain::Callback cb) {
         connection->Read(std::move(cb));
@@ -361,7 +395,8 @@ void Blizzard::AcquireToken(std::function<void()> continuation) {
 
     const auto secret = GetConfig()->GetSecret(identity);
     if (!secret) { 
-        throw std::runtime_error("Cannot find a service with identity = blizzard");
+        throw std::runtime_error(
+            "Cannot find a service with identity = blizzard");
     }
     
     auto request = blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
@@ -546,7 +581,6 @@ void Blizzard::Invoker::Execute(command::Arena command) {
 }
 
 void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
-    // TODO: cache realm-id, then chain execution
     auto initiateQuery = [blizzard = blizzard_, cmd = std::move(cmd)]() {
         blizzard->QueryRealm([blizzard, cmd = std::move(cmd)](size_t realmId) {
             Console::Write("[blizzard] acquire realm id:", realmId, '\n');

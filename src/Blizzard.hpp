@@ -15,11 +15,7 @@ using boost::asio::ip::tcp;
 class Config;
 
 namespace service {
-/**
- * TODO:
- * - [ ] save token:
- *  Token can last quite a lot so I don't need to request new one each time
-*/
+
 class Blizzard 
     : public std::enable_shared_from_this<Blizzard> 
 {

@@ -19,13 +19,15 @@ void PrintError() {
     const auto kMask { FORMAT_MESSAGE_ALLOCATE_BUFFER 
         | FORMAT_MESSAGE_FROM_SYSTEM 
         | FORMAT_MESSAGE_IGNORE_INSERTS };
-    if (!FormatMessage(kMask, nullptr, id, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), 
-        (LPTSTR)&buffer, 0, nullptr)) 
+    if (!FormatMessage(kMask, nullptr, id
+        , MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT)
+        , (LPTSTR)&buffer, 0, nullptr)) 
     {
-        service::Console::Write("[console]: [error] FormatMessage call failed for error", id, "\n");
+        service::Console::Write("[console]: --error \"FormatMessage "
+            "call failed\" with error id:", id, "\n");
     }
     else {
-        service::Console::Write("[console]: [error] ", buffer, "\n");
+        service::Console::Write("[console]: --error", buffer, "\n");
     }
     LocalFree(buffer);
 }
@@ -81,7 +83,8 @@ std::string Console::ReadLine() {
     unsigned long read = 0; 
     
     std::unique_lock<std::mutex> guard { in_ };
-    // TODO: add mechanism to catch the case when user entered more than `kMaxChars` characters
+    // TODO: add mechanism to catch the case 
+    // when user entered more than `kMaxChars` characters
     const auto code = ReadConsoleW(handle, wides, kMaxChars, &read, nullptr);
     guard.unlock();
     if (!code) {
@@ -159,7 +162,8 @@ void Console::Run() {
         // Substitute alias with command and required params if it's alias
         auto referred = aliases_->GetCommand(cmd);
         if (referred) {
-            Write("[console] used alias ", cmd, "refers to ", referred->command, '\n');
+            Write("[console] used alias ", cmd
+                , "refers to ", referred->command, '\n');
             cmd = referred->command;
             for (const auto& [k, v]: referred->params) {
                 const auto& key = k;
@@ -195,12 +199,14 @@ void Console::Dispatch(std::string_view cmd, const command::Args& args) {
         std::vector<command::ParamData> params;
         params.reserve(args.size());
         for (auto&& [k, v]: args) {
-            params.push_back(command::ParamData{ std::string(k), std::string(v) });
+            params.push_back(command::ParamData{ 
+                std::string(k), std::string(v) });
         }        
         command::RawCommand raw { std::move(lowerCmd), std::move(params) };
         if (!inbox_->TryPush(std::move(raw))) {
             // abandon the command
-            Write("[console] fail to proccess command: command storage is full\n");
+            Write("[console] fail to proccess command:"
+                " command storage is full\n");
         }
     }
 }
@@ -211,7 +217,8 @@ void Console::Invoker::Execute(command::Alias cmd) {
         console_->aliases_->Add(cmd.alias_, cmd.command_, cmd.params_);
     }
     else {
-        Write("[console] alias", cmd.alias_, "can't be created: it coincidened with existing command!");
+        Write("[console] alias", cmd.alias_
+            , "can't be created: it coincidened with existing command!");
     }
 }
 
@@ -231,7 +238,8 @@ void Console::Invoker::Execute(command::Help) {
         "  !validate - validate token for twitch\n"
         "  !login - login twitch\n"
         "  !join -channel <channel_name> - join channel\n"
-        "  !chat -channel <channel_name> -message \"<message>\" - send a message to chat of the specified channel\n"
+        "  !chat -channel <channel_name> -message \"<message>\""
+            " - send a message to chat of the specified channel\n"
         "  !leave -channel <channel_name> - leave joined channel\n"
     );
 }
