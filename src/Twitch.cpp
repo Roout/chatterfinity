@@ -202,7 +202,6 @@ void Twitch::HandleResponse(net::irc::Message message) {
     const auto ircCmdKind = ircCmds.Get(message.command_);
     if (!ircCmdKind) return;
 
-    // TODO: slice bloated switch
     switch (*ircCmdKind) {
         case IrcCommands::kPrivMsg: {
             HandlePrivateMessage(message);
