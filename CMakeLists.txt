@@ -38,6 +38,7 @@ list(APPEND sources
 	"src/Response.cpp"
 	"src/Config.cpp"
 	"src/Chain.cpp"
+	"src/Alias.cpp"
 	
 	"src/Console.cpp"
 	"src/Blizzard.cpp"
