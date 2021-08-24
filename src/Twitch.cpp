@@ -251,23 +251,17 @@ void Twitch::Invoker::Execute(command::Validate) {
     }
 
     auto weak = utils::WeakFrom<HttpConnection>(connection);
-    auto connect = [weak](Chain::Callback cb) {
-        assert(weak.use_count() == 1);
-        auto shared = weak.lock();
-        shared->Connect(std::move(cb));
+    auto connect = [connection](Chain::Callback cb) {
+        connection->Connect(std::move(cb));
     };
 
     auto request = twitch::Validation{ secret->token_ }.Build();
-    auto write = [weak, request = std::move(request)](Chain::Callback cb) {
-        assert(weak.use_count() == 1);
-        auto shared = weak.lock();
-        shared->ScheduleWrite(std::move(request), std::move(cb));
+    auto write = [connection, request = std::move(request)](Chain::Callback cb) {
+        connection->ScheduleWrite(std::move(request), std::move(cb));
     };
     
-    auto read = [weak](Chain::Callback cb) {
-        assert(weak.use_count() == 1);
-        auto shared = weak.lock();
-        shared->Read(std::move(cb));
+    auto read = [connection](Chain::Callback cb) {
+        connection->Read(std::move(cb));
     };
     
     auto readCallback = [weak](){
@@ -278,18 +272,18 @@ void Twitch::Invoker::Execute(command::Validate) {
             json.Parse(body.data(), body.size());
             auto login = json["login"].GetString();
             auto expiration = json["expires_in"].GetUint64();
-            Console::Write("[twitch] validation success. Login:", login, "Expire in:", expiration, '\n');
+            Console::Write("[twitch] validation success. Login:", login
+                , "Expire in:", expiration, '\n');
         }
         else {
             Console::Write("[ERROR] [twitch] validation failed. Status:"
-                , head.statusCode_
-                , head.reasonPhrase_
+                , head.statusCode_, head.reasonPhrase_
                 , '\n', body, '\n'
             );
         }
     };
 
-    auto chain = std::make_shared<Chain>();
+    auto chain = std::make_shared<Chain>(twitch_->context_);
     (*chain).Add(std::move(connect))
         .Add(std::move(write))
         .Add(std::move(read), std::move(readCallback))
@@ -378,7 +372,7 @@ void Twitch::Invoker::Execute(command::Login cmd) {
         irc->Read(std::move(cb));
     };
 
-    auto chain = std::make_shared<Chain>();
+    auto chain = std::make_shared<Chain>(twitch_->context_);
     (*chain).Add(std::move(connect))
         .Add(std::move(write))
         .Add(std::move(read), std::move(readCallback))
