@@ -5,6 +5,7 @@
 #include "Command.hpp"
 #include "Utility.hpp"
 #include "Alias.hpp"
+#include "Chain.hpp"
 
 #include "rapidjson/document.h"
 
@@ -248,46 +249,45 @@ void Twitch::Invoker::Execute(command::Validate) {
     if (!secret) {
         throw std::runtime_error("Fail to create config");
     }
-    auto onConnect = [request = twitch::Validation{ secret->token_ }.Build()
-        , twitchService = twitch_
-        , connection = utils::WeakFrom<HttpConnection>(connection)
-    ]() {
-        assert(connection.use_count() == 1 && 
-            "Fail invariant:"
-            "Expected: 1 ref - instance which is executing Connection::OnWrite"
-            "Assertion Failure may be caused by changing the "
-            "(way)|(place where) this callback is being invoked"
-        );
-        auto shared = connection.lock();
-        shared->ScheduleWrite(std::move(request), [twitchService, connection]() {
-            assert(connection.use_count() == 1);
 
-            auto OnReadSuccess = [twitchService, connection]() {
-                assert(connection.use_count() == 1);
-                
-                auto shared = connection.lock();
-                const auto [head, body] = shared->AcquireResponse();
-                if (head.statusCode_ == 200) {
-                    rapidjson::Document json; 
-                    json.Parse(body.data(), body.size());
-                    auto login = json["login"].GetString();
-                    auto expiration = json["expires_in"].GetUint64();
-                    Console::Write("[twitch] validation success. Login:", login, "Expire in:", expiration, '\n');
-                }
-                else {
-                    Console::Write("[ERROR] [twitch] validation failed. Status:"
-                        , head.statusCode_
-                        , head.reasonPhrase_
-                        , '\n', body, '\n'
-                    );
-                }
-            };
-
-            auto shared = connection.lock();
-            shared->Read(std::move(OnReadSuccess));
-        });
+    auto weak = utils::WeakFrom<HttpConnection>(connection);
+    auto connect = [connection](Chain::Callback cb) {
+        connection->Connect(std::move(cb));
     };
-    connection->Connect(std::move(onConnect));
+
+    auto request = twitch::Validation{ secret->token_ }.Build();
+    auto write = [connection, request = std::move(request)](Chain::Callback cb) {
+        connection->ScheduleWrite(std::move(request), std::move(cb));
+    };
+    
+    auto read = [connection](Chain::Callback cb) {
+        connection->Read(std::move(cb));
+    };
+    
+    auto readCallback = [weak](){
+        auto shared = weak.lock();
+        const auto [head, body] = shared->AcquireResponse();
+        if (head.statusCode_ == 200) {
+            rapidjson::Document json; 
+            json.Parse(body.data(), body.size());
+            auto login = json["login"].GetString();
+            auto expiration = json["expires_in"].GetUint64();
+            Console::Write("[twitch] validation success. Login:", login
+                , "Expire in:", expiration, '\n');
+        }
+        else {
+            Console::Write("[ERROR] [twitch] validation failed. Status:"
+                , head.statusCode_, head.reasonPhrase_
+                , '\n', body, '\n'
+            );
+        }
+    };
+
+    auto chain = std::make_shared<Chain>(twitch_->context_);
+    (*chain).Add(std::move(connect))
+        .Add(std::move(write))
+        .Add(std::move(read), std::move(readCallback))
+        .Execute();
 }
 
 void Twitch::Invoker::Execute(command::Shutdown) {
@@ -356,17 +356,27 @@ void Twitch::Invoker::Execute(command::Login cmd) {
         , id
     );
 
-    auto onConnect = [request = twitch::IrcAuth{cmd.token_, cmd.user_}.Build()
-        , twitchService = twitch_
-        , irc = twitch_->irc_.get()
-    ]() {
-        irc->ScheduleWrite(std::move(request), [twitchService, irc]() {
-            irc->Read([twitchService, irc]() {
-                twitchService->HandleResponse(irc->AcquireResponse());
-            });
-        });
+    auto request = twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
+    auto irc = twitch_->irc_.get();
+    auto readCallback = [irc, twitch = twitch_](){
+        twitch->HandleResponse(irc->AcquireResponse());
     };
-    twitch_->irc_->Connect(std::move(onConnect));
+
+    auto connect = [irc](Chain::Callback cb) {
+        irc->Connect(std::move(cb));
+    };
+    auto write = [irc, request = std::move(request)](Chain::Callback cb) {
+        irc->ScheduleWrite(std::move(request), std::move(cb));
+    };
+    auto read = [irc](Chain::Callback cb){
+        irc->Read(std::move(cb));
+    };
+
+    auto chain = std::make_shared<Chain>(twitch_->context_);
+    (*chain).Add(std::move(connect))
+        .Add(std::move(write))
+        .Add(std::move(read), std::move(readCallback))
+        .Execute();
 }
 
 void Twitch::Invoker::Execute(command::RealmStatus cmd) {

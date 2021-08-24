@@ -282,7 +282,6 @@ void HttpConnection::OnHeaderRead(const boost::system::error_code& error, size_t
         }
     } 
     else {
-        log_->Write(LogType::kInfo, "OnHeaderRead read", bytes, "bytes.\n");
         { // extract header
             const auto data { inbox_.data() };
             const std::string header {
@@ -366,8 +365,6 @@ void HttpConnection::OnReadIntactBody(const boost::system::error_code& error, si
         }
     }
     else {
-        log_->Write(LogType::kInfo, "OnReadIntactBody read", bytes, "bytes.\n");
-    
         auto data = inbox_.data();
         std::string chunk {
             boost::asio::buffers_begin(data), 
@@ -401,13 +398,12 @@ void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, s
         log_->Write(LogType::kError, "OnReadChunkedBody:", error.message(), "\n");
         assert(socket_);
         if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
-            // prevent reconnection after shutdown
+            // condition prevents reconnection attempts after shutdown
             Reconnect();
         }
         return;
     } 
 
-    log_->Write(LogType::kInfo, "OnReadChunkedBody read", bytes, "bytes.\n");
     const auto data = inbox_.data();
     std::string chunk {
         boost::asio::buffers_begin(data), 
@@ -416,12 +412,10 @@ void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, s
     inbox_.consume(bytes);
     if (chunk_.consumed_ & 1) { 
         // chunk content
-        log_->Write(LogType::kInfo, "chunk:", chunk_.consumed_ / 2, ":", chunk.size(), "bytes\n");
         chunk_.consumed_++;
         if (!chunk_.size_) {
             // This is the last part of 0 chunk so notify about that subscribers
             // Body has been already read
-            log_->Write(LogType::kInfo, "read OnReadChunkedBody size:\n", body_.size(), '\n');
             if (onReadSuccess_) {
                 std::invoke(onReadSuccess_);
             }
@@ -433,7 +427,6 @@ void HttpConnection::OnReadChunkedBody(const boost::system::error_code& error, s
         // chunk size
         chunk_.size_ = utils::ExtractInteger(chunk, 16);
         chunk_.consumed_++;
-        log_->Write(LogType::kInfo, "chunk:", chunk_.consumed_ / 2, "of size", chunk_.size_, '\n');
     }
     // read next line
     ReadChunkedBody();
@@ -466,8 +459,6 @@ void IrcConnection::OnRead(const boost::system::error_code& error, size_t bytes)
         }
     } 
     else {
-        log_->Write(LogType::kInfo, "OnRead read", bytes, "bytes.\n");
-
         const auto data { inbox_.data() };
         std::string buffer {
             boost::asio::buffers_begin(data), 
