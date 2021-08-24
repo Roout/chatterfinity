@@ -103,6 +103,87 @@ void Twitch::Run() {
     }
 }
 
+void Twitch::HandlePrivateMessage(net::irc::Message& message) {
+    enum { kChannel, kMessage, kRequiredFields };
+    static_assert(kMessage == 1, "According to IRC format message "
+        "for PRIVMSG command is always second parameter"
+        "(numeration starting with 0)");
+    
+    // user command, not IRC command
+    enum Sign : char { kChannelSign = '#', kCommandSign = '!'};
+    auto& ircParams { message.params_ };
+
+    // is user-defined command
+    if (ircParams.size() == kRequiredFields
+        && ircParams[kChannel].front() == kChannelSign
+        && ircParams[kMessage].front() == kCommandSign
+    ) {
+        // chat message is an input from the user in twitch chat
+        auto& chatMessage { ircParams[kMessage] };
+        std::transform(chatMessage.cbegin()
+            , chatMessage.cend()
+            , chatMessage.begin()
+            , [](unsigned char c) { return std::tolower(c); }
+        );
+
+        std::string_view unprocessed { chatMessage };
+        size_t chatCommandEnd = unprocessed.find_first_of(' ');
+        if (chatCommandEnd == std::string_view::npos) {
+            chatCommandEnd = unprocessed.size();
+        }
+        // here we're still not sure whether it's a command or just a coincidence
+        std::string_view chatCommand { unprocessed.data() + 1, chatCommandEnd - 1 };
+        unprocessed.remove_prefix(chatCommandEnd + 1);
+        // divide message to tokens (maybe parameters for the chat command)
+        auto params = command::ExtractArgs(unprocessed, ' ');
+
+        assert(aliases_);
+        // Substitute alias with command and required params if it's alias
+        auto referred = aliases_->GetCommand(chatCommand);
+        if (referred) { 
+            Console::Write("[twitch] used alias "
+                , chatCommand, "refers to "
+                , referred->command, '\n');
+            chatCommand = referred->command;
+            for (const auto& [k, v]: referred->params) {
+                const auto& key = k;
+                if (auto it = std::find_if(params.cbegin(), params.cend(), 
+                    [&key](const command::ParamView& data) {
+                        return data.key_ == key; 
+                    }); it == params.cend()
+                ) { // add param to param list if it's not already provided by user
+                    params.push_back(command::ParamView{ 
+                        std::string_view{ k }, std::string_view{ v } });
+                }
+            }
+        }       
+
+        Console::Write("[twitch-debug] process possible command:", chatCommand, '\n');
+        // skipped `kCommandSign`
+        if (auto handle = translator_.GetHandle(chatCommand); handle) {
+            // username (nick) has to be between (! ... @)
+            auto user = ::ExtractBetween(message.prefix_, '!', '@');
+            assert(!user.empty() && "wrong understanding of IRC format");
+            // skipped channel prefix: #
+            auto twitchChannel { ::ShiftView(ircParams[kChannel], 1) };
+
+            command::Args commandParams { 
+                command::ParamView { "channel", twitchChannel },
+                command::ParamView { "user", user } };
+
+            for (auto&& param: params) {
+                commandParams.push_back(param);
+            }
+
+            std::stringstream ss;
+            for (auto&& [k, v]: params) ss << k << " " << v << ' '; 
+            Console::Write("[twitch] params:", ss.str(), '\n');
+            
+            std::invoke(*handle, commandParams);
+        }
+    }
+}
+
 void Twitch::HandleResponse(net::irc::Message message) {
     using IrcCommands = net::irc::IrcCommands;
 
@@ -124,86 +205,7 @@ void Twitch::HandleResponse(net::irc::Message message) {
     // TODO: slice bloated switch
     switch (*ircCmdKind) {
         case IrcCommands::kPrivMsg: {
-            enum { kChannel, kMessage, kRequiredFields };
-            static_assert(kMessage == 1, "According to IRC format message "
-                "for PRIVMSG command is always second parameter");
-
-            // TODO: either add alias sign 
-            // either use ! as sign for both alias and original command
-            
-            // user command, not IRC command
-            enum Sign : char { kChannelSign = '#', kCommandSign = '!'};
-            auto& ircParams { message.params_ };
-
-            // is user-defined command
-            if (ircParams.size() == kRequiredFields
-                && ircParams[kChannel].front() == kChannelSign
-                && ircParams[kMessage].front() == kCommandSign
-            ) {
-                // chat message is an input from the user in twitch chat
-                auto& chatMessage { ircParams[kMessage] };
-                std::transform(chatMessage.cbegin()
-                    , chatMessage.cend()
-                    , chatMessage.begin()
-                    , [](unsigned char c) { return std::tolower(c); }
-                );
-
-                std::string_view unprocessed { chatMessage };
-                size_t chatCommandEnd = unprocessed.find_first_of(' ');
-                if (chatCommandEnd == std::string_view::npos) {
-                    chatCommandEnd = unprocessed.size();
-                }
-                // here we're still not sure whether it's a command or just a coincidence
-                std::string_view chatCommand { unprocessed.data() + 1, chatCommandEnd - 1 };
-                unprocessed.remove_prefix(chatCommandEnd + 1);
-                // divide message to tokens (maybe parameters for the chat command)
-                auto params = command::ExtractArgs(unprocessed, ' ');
-
-                assert(aliases_);
-                // Substitute alias with command and required params if it's alias
-                auto referred = aliases_->GetCommand(chatCommand);
-                if (referred) { 
-                    Console::Write("[twitch] used alias "
-                        , chatCommand, "refers to "
-                        , referred->command, '\n');
-                    chatCommand = referred->command;
-                    for (const auto& [k, v]: referred->params) {
-                        const auto& key = k;
-                        if (auto it = std::find_if(params.cbegin(), params.cend(), 
-                            [&key](const command::ParamView& data) {
-                                return data.key_ == key; 
-                            }); it == params.cend()
-                        ) { // add param to param list if it's not already provided by user
-                            params.push_back(command::ParamView{ 
-                                std::string_view{ k }, std::string_view{ v } });
-                        }
-                    }
-                }       
-
-                Console::Write("[twitch-debug] process possible command:", chatCommand, '\n');
-                // skipped `kCommandSign`
-                if (auto handle = translator_.GetHandle(chatCommand); handle) {
-                    // username (nick) has to be between (! ... @)
-                    auto user = ::ExtractBetween(message.prefix_, '!', '@');
-                    assert(!user.empty() && "wrong understanding of IRC format");
-                    // skipped channel prefix: #
-                    auto twitchChannel { ::ShiftView(ircParams[kChannel], 1) };
-
-                    command::Args commandParams { 
-                        command::ParamView { "channel", twitchChannel },
-                        command::ParamView { "user", user } };
-
-                    for (auto&& param: params) {
-                        commandParams.push_back(param);
-                    }
-
-                    std::stringstream ss;
-                    for (auto&& [k, v]: params) ss << k << " " << v << ' '; 
-                    Console::Write("[twitch] params:", ss.str(), '\n');
-                    
-                    std::invoke(*handle, commandParams);
-                }
-            }
+            HandlePrivateMessage(message);
         } break;
         case IrcCommands::kPing: {
             if (auto handle = translator_.GetHandle("ping"); handle) {
@@ -256,15 +258,15 @@ void Twitch::Invoker::Execute(command::Validate) {
     };
 
     auto request = twitch::Validation{ secret->token_ }.Build();
-    auto write = [connection, request = std::move(request)](Chain::Callback cb) {
-        connection->ScheduleWrite(std::move(request), std::move(cb));
+    auto write = [connection, req = std::move(request)](Chain::Callback cb) {
+        connection->ScheduleWrite(std::move(req), std::move(cb));
     };
     
     auto read = [connection](Chain::Callback cb) {
         connection->Read(std::move(cb));
     };
     
-    auto readCallback = [weak](){
+    auto readCallback = [weak]() {
         auto shared = weak.lock();
         const auto [head, body] = shared->AcquireResponse();
         if (head.statusCode_ == 200) {
@@ -318,7 +320,8 @@ void Twitch::Invoker::Execute(command::Chat cmd) {
     }
     else {
         auto chat = twitch::Chat{cmd.channel_, cmd.message_}.Build();
-        Console::Write("[twitch] trying to send message:", chat.substr(0, chat.size() - 2), "\n");
+        Console::Write("[twitch] trying to send message:"
+            , chat.substr(0, chat.size() - 2), "\n");
         twitch_->irc_->ScheduleWrite(std::move(chat), []() {
             Console::Write("[twitch] sent message to channel\n");
         });
@@ -342,7 +345,8 @@ void Twitch::Invoker::Execute(command::Leave cmd) {
 
 void Twitch::Invoker::Execute(command::Login cmd) {
     assert(twitch_ && "Cannot be null");
-    // TODO: still need to handle the case when all attempt to reconnect failed!
+    // TODO: still need to handle the case 
+    // when all attempt to reconnect failed!
     if (twitch_->irc_) {
         Console::Write("[twitch] irc connection is already established\n");
         return;
@@ -383,7 +387,8 @@ void Twitch::Invoker::Execute(command::RealmStatus cmd) {
     assert(twitch_ && "Cannot be null");
     assert(twitch_->irc_ && "Cannot be null");
 
-    Console::Write("[twitch] execute realm-status command:", cmd.channel_, cmd.user_, '\n');
+    Console::Write("[twitch] execute realm-status command:"
+        , cmd.channel_, cmd.user_, '\n');
     command::RawCommand raw { "realm-status", { 
         command::ParamData { "channel", std::move(cmd.channel_) }
         , { "user", std::move(cmd.user_) } }
@@ -392,7 +397,8 @@ void Twitch::Invoker::Execute(command::RealmStatus cmd) {
         Console::Write("[twitch] push `RealmStatus` to queue\n");
     }
     else {
-        Console::Write("[twitch] failed to push `RealmStatus` to queue is full\n");
+        Console::Write("[twitch] failed to push "
+            "`RealmStatus` to queue is full\n");
     }
 }
 

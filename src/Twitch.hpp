@@ -53,6 +53,8 @@ public:
 private:
     void HandleResponse(net::irc::Message message);
 
+    void HandlePrivateMessage(net::irc::Message& message);
+
     class Invoker;
 
     using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
@@ -97,4 +99,4 @@ inline void Twitch::Execute(Command&& cmd) {
     invoker_->Execute(std::forward<Command>(cmd));
 }
 
-}
+} // namespace service
