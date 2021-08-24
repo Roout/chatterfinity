@@ -2,19 +2,19 @@
 
 ![Linux](https://github.com/Roout/chatterfinity/actions/workflows/cmake.yml/badge.svg?branch=master)
 
-Chat bot provides in Twtich chat an information about arena leaderboard, server status, etc. Bot uses WOW Blizzard API.  
-Bot is in development. Some functionality will be added later.
+This **Twitch Chat Bot** provides an information about **TBC Arena Leaderboard**, **Realm Status**, etc. Bot uses Blizzard WOW API.  
+Bot is in development so some functionality will be added later.
 
 ## Remote services
 
-- Discord
+- Discord (not added yet)
 - [Twitch API](https://dev.twitch.tv/docs/api)
 - [World of Warcraft API](https://develop.battle.net/documentation/world-of-warcraft-classic/game-data-apis)
 
 ## Dependencies
 
 - OpenSSL 1.1.1L
-- Rapidjson
+- Rapidjson 1.1.0
 - Boost.Asio 1.72.0
 
 ## Quick Start
@@ -27,14 +27,14 @@ Bot is in development. Some functionality will be added later.
 
 - The example of the [services-example.json](secret/services.json) is provided.
 - You can get `client_id` and `secret` in [Twitch Developer Console](https://dev.twitch.tv/) and [Blizzard Developer Console](https://develop.battle.net/).
-- **Secret** is required only for Blizzard [Client Credential Flow](https://develop.battle.net/documentation/guides/using-oauth/client-credentials-flow) and **MUST NOT** be provided to any other party.  
+- **Secret** is required only for Blizzard [Client Credential Flow](https://develop.battle.net/documentation/guides/using-oauth/client-credentials-flow) and **MUST NOT** be disclosed to any 3rd party.  
 - You can get Twitch `token` running [local server](https://github.com/Roout/twitch-token) and opening it in browser at <http://localhost:3000>. More information is provided at the page of the [twitch-token generator](https://github.com/Roout/twitch-token).
 
 ## Commands
 
 Commands can be invoked within either Console either Twitch chat. Chat messages can be russian.  
 Commands which have already been implemented are quite crude without any customization and flexibility because they are used to test core of the bot now.  
-Bot talks in chat via [PRIVMSG](https://dev.twitch.tv/docs/irc/guide) IRC command.
+Bot sends messages in the chat using [PRIVMSG](https://dev.twitch.tv/docs/irc/guide) IRC command.
 
 Bot supports [UTF8](https://en.wikipedia.org/wiki/UTF-8) charset:
 
@@ -49,7 +49,7 @@ For now you can invoke the following custom commands within channel chat:
 |----------------|----------------|-----------------------------------------------------|
 | `!realm-status`|                | Show flamegor server status and queue information   |
 | `!arena`       |                | Show current top 1 of the EU region                 |
-| `!arena`       | -player "nick" | Show team name, rank, team rating                   |
+| `!arena`       | -player "nick" | Show team name, rank, rating of the given player    |
 
 You also can call alias within chat. But you can add alias only within console
 
@@ -112,7 +112,7 @@ Arena leaderboard is one of the most interesting thing for WOW community so it w
 ### Restrictions
 
 There are several very imporatant restriction on the communication in twitch chat. They depend on MODE and Bot authority.
-Bot DOESN't consider twitch restrictions yet. Following restriction will be implemented soon:
+Bot doesn't consider twitch restrictions yet. Following restriction will be implemented soon:
 
 - Minimum 1 second delay between messages via IRC connection. For slow mode it can be greater.
 - 30 messages for 1 second
