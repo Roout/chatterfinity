@@ -3,6 +3,8 @@
 #include <memory>
 #include <functional>
 
+#include <boost/asio.hpp>
+
 /**
  * Chain MUST NOT (and IS NOT) observed by more than 1 thread at once
  * TODO: remove already completed tasks from the chain
@@ -11,6 +13,8 @@ class Chain : public std::enable_shared_from_this<Chain> {
 public:
     using Callback = std::function<void()>;
     using Task = std::function<void(Callback)>;
+
+    Chain(std::shared_ptr<boost::asio::io_context> context);
 
     Chain& Add(Callback cb);
 
@@ -32,7 +36,6 @@ private:
         Callback cb;
     };
 
+    std::shared_ptr<boost::asio::io_context> context_;
     std::list<Bind> chain_;
-    // points to the first task to be executed
-    std::list<Bind>::iterator current_ { chain_.end() };
 };
