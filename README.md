@@ -130,7 +130,12 @@ Connection uses (loads for [SSL Context](https://www.boost.org/doc/libs/1_72_0/d
 ### Blizzard
 
 **Source:** [DigiCert list](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
-Root certificate is DigiCert High Assurance EV Root CA;
+Root certificate is DigiCert High Assurance EV Root CA;  
+Used by **eu.battle.net** (Blizzard Auth)
+
+**Source:** [DigiCert list](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
+Root certificate is DigiCert Global Root CA  
+Used by **eu.api.blizzard.com** (Blizzard API)
 
 ### Twitch
 
