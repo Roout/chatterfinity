@@ -142,7 +142,7 @@ std::string CredentialsExchange::Build() const {
 }
 
 std::string Realm::Build() const {
-    // https://eu.api.blizzard.com/data/wow/realm/plamegor?namespace=dynamic-classic-eu&locale=en_US&access_token=USJa4cAz4h0Ggw2r07wbM1IfdAIWKFAVhr
+    // https://eu.api.blizzard.com/data/wow/realm/flamegor?namespace=dynamic-classic-eu&locale=en_US&access_token=USJa4cAz4h0Ggw2r07wbM1IfdAIWKFAVhr
     const char *requestTemplate = 
             "GET /data/wow/realm/%1%?namespace=%2%&locale=%3% HTTP/1.1\r\n"
             "Host: %4%.api.blizzard.com\r\n"
