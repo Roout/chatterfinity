@@ -298,8 +298,6 @@ void Blizzard::QueryRealm(Callback continuation) {
     constexpr const char * const kHost { "eu.api.blizzard.com" };
     constexpr const char * const kService { "https" };
 
-    Console::Write("[blizzard]: trying to initiate HttpConnection connection for realm id!\n");
-
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
@@ -335,9 +333,11 @@ void Blizzard::QueryRealm(Callback continuation) {
     auto chain = std::make_shared<Chain>(context_);
     (*chain).Add(std::move(connect))
         .Add(std::move(write))
-        .Add(std::move(read), std::move(readCallback))
-        .Add(std::move(continuation))
-        .Execute();
+        .Add(std::move(read), std::move(readCallback));
+    if (continuation) {
+        chain->Add(std::move(continuation));
+    }
+    chain->Execute();
 }
 
 void Blizzard::QueryRealmStatus(command::RealmStatus cmd
@@ -373,7 +373,7 @@ void Blizzard::QueryRealmStatus(command::RealmStatus cmd
         }
         else {
             message = to_string(realmResponse);
-            // TODO: cache realm's data
+            // cache realm's data
             Realm realm { service->realm_.Get<Realm>()->id
                 , realmResponse.name
                 , realmResponse.queue
@@ -412,9 +412,11 @@ void Blizzard::QueryRealmStatus(command::RealmStatus cmd
     auto chain = std::make_shared<Chain>(context_);
     (*chain).Add(std::move(connect))
         .Add(std::move(write))
-        .Add(std::move(read), std::move(readCallback))
-        .Add(std::move(continuation))
-        .Execute();
+        .Add(std::move(read), std::move(readCallback));
+    if (continuation) {
+        chain->Add(std::move(continuation));
+    }
+    chain->Execute();
 }
 
 void Blizzard::AcquireToken(Callback continuation) {
@@ -463,24 +465,36 @@ void Blizzard::AcquireToken(Callback continuation) {
     auto chain = std::make_shared<Chain>(context_);
     (*chain).Add(std::move(connect))
         .Add(std::move(write))
-        .Add(std::move(read), std::move(readCallback))
-        .Add(std::move(continuation))
-        .Execute();
+        .Add(std::move(read), std::move(readCallback));
+    if (continuation) {
+        chain->Add(std::move(continuation));
+    }
+    chain->Execute();
 }
 
 void Blizzard::Invoker::Execute(command::RealmID) {
-    auto initiateRealmQuery = [blizzard = blizzard_]() {
-        blizzard->QueryRealm([blizzard]() {
-            Console::Write("[blizzard] acquire realm id:"
-                , blizzard->realm_.Get<Realm>()->id, '\n');
-        });
+    auto completionToken = [blizzard = blizzard_]() {
+        Console::Write("[blizzard] acquire realm id:"
+            , blizzard->realm_.Get<Realm>()->id, '\n');
     };
+
+    if (blizzard_->realm_.IsValid()) {
+        assert(blizzard_->realm_.Get<Realm>());
+        std::invoke(completionToken);
+        return;
+    }
+
+    auto chain = std::make_shared<Chain>(blizzard_->context_);
     if (!blizzard_->token_.IsValid()) {
-        blizzard_->AcquireToken(std::move(initiateRealmQuery));
+        chain->Add([blizzard = blizzard_](Chain::Callback cb) {
+            blizzard->AcquireToken(std::move(cb));
+        });
     }
-    else {
-        std::invoke(initiateRealmQuery);
-    }
+    chain->Add([blizzard = blizzard_](Chain::Callback cb) {
+        blizzard->QueryRealm(std::move(cb));
+    });
+    chain->Add(std::move(completionToken));
+    chain->Execute();
 }
 
 void Blizzard::Invoker::Execute(command::Arena command) {
@@ -615,21 +629,40 @@ void Blizzard::Invoker::Execute(command::Arena command) {
 }
 
 void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
-    auto initiateQuery = [blizzard = blizzard_, cmd = std::move(cmd)]() {
-        blizzard->QueryRealm([blizzard, cmd = std::move(cmd)]() {
-            Console::Write("[blizzard] acquire realm id:", 
-                blizzard->realm_.Get<Realm>()->id, '\n');
-            blizzard->QueryRealmStatus(std::move(cmd), []() {
-                Console::Write("[blizzard] complete realm status request\n");
-            });
-        });
-    };
+    auto chain = std::make_shared<Chain>(blizzard_->context_);
+
     if (!blizzard_->token_.IsValid()) {
-        blizzard_->AcquireToken(std::move(initiateQuery));
+        // 1. Acquire token
+        chain->Add([blizzard = blizzard_](Chain::Callback cb) {
+            // `cb` is used as a signal that the initiated 
+            // async operation is already completed
+            blizzard->AcquireToken(std::move(cb));
+        });
     }
-    else {
-        std::invoke(initiateQuery);
+
+    if (!blizzard_->realm_.IsValid()) {
+        assert(blizzard_->realm_.Get<Realm>());
+        // 2. Get Realm ID
+        chain->Add([blizzard = blizzard_](Chain::Callback cb) {
+            blizzard->QueryRealm(std::move(cb));
+        });
+        // 3. Notify about Realm ID
+        chain->Add([blizzard = blizzard_](){
+            Console::Write("[blizzard] acquired realm id:", 
+                blizzard->realm_.Get<Realm>()->id, '\n');
+        });
     }
+
+    // 4. Get Realm's data (despite the fact that Realm's status may 
+    // be already acquired). This information must be updated on demand!
+    chain->Add([blizzard = blizzard_, cmd = std::move(cmd)](Chain::Callback cb) {
+        blizzard->QueryRealmStatus(std::move(cmd), std::move(cb));
+    });
+    // 5. Notify about request completion
+    chain->Add([]() {
+        Console::Write("[blizzard] completed realm status request\n");
+    });
+    chain->Execute();
 }
 
 void Blizzard::Invoker::Execute(command::AccessToken) {
