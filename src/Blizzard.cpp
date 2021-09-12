@@ -232,13 +232,20 @@ Blizzard::Blizzard(const Config *config, Container * outbox)
 {
     assert(config_ && "Config is NULL");
 
-    const char * const kVerifyFilePath = "crt/DigiCertHighAssuranceEVRootCA.crt.pem";
     // [DigiCert](https://www.digicert.com/kb/digicert-root-certificates.htm#roots)
-    // TODO: read this path from secret + with some chiper
+    // CAs required for secure access to *.battle.net and *.api.blizzard.com
+    // TODO: try to avoid loading of CAs
+    const char * const kBattleNet = "crt/DigiCertHighAssuranceEVRootCA.crt.pem";
+    const char * const kBlizzardApi = "crt/DigiCertGlobalRootCA.crt.pem";
     boost::system::error_code error;
-    ssl_->load_verify_file(kVerifyFilePath, error);
+    ssl_->load_verify_file(kBattleNet, error);
     if (error) {
-        Console::Write("[blizzard] --error:", error.message(), '\n');
+        Console::Write("[blizzard] --error: (*.battle.net CA)", error.message(), '\n');
+        error.clear();
+    }
+    ssl_->load_verify_file(kBlizzardApi, error);
+    if (error) {
+        Console::Write("[blizzard] --error: (*.api.blizzard.com CA)", error.message(), '\n');
     }
 }
 
@@ -274,6 +281,8 @@ void Blizzard::Run() {
 void Blizzard::QueryRealm(std::function<void(size_t realmId)> continuation) {
     constexpr const char * const kHost { "eu.api.blizzard.com" };
     constexpr const char * const kService { "https" };
+
+    Console::Write("[blizzard]: trying to initiate HttpConnection connection for realm id!\n");
 
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
