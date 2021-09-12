@@ -45,14 +45,13 @@ public:
     }
 
 private:
+    using Callback = std::function<void()>;
 
-    void QueryRealm(std::function<void(size_t realmId)> continuation = {});
+    void QueryRealm(Callback continuation);
 
-    void QueryRealmStatus(size_t realmId
-        , command::RealmStatus cmd
-        , std::function<void()> continuation = {});
+    void QueryRealmStatus(command::RealmStatus cmd, Callback continuation);
 
-    void AcquireToken(std::function<void()> continuation = {});
+    void AcquireToken(Callback continuation);
 
     size_t GenerateId() const;
 
@@ -67,6 +66,8 @@ private:
     // TODO: Add everything to cache-table
     CacheSlot token_;
     CacheSlot arena_;
+    CacheSlot realm_;
+
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;
     std::shared_ptr<ssl::context> ssl_;
