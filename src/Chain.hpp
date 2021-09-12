@@ -20,6 +20,8 @@ public:
 
     Chain(std::shared_ptr<boost::asio::io_context> context);
 
+    // FIXME:
+    // Here `cb` MUST NOT be async (must not invoke async work)
     Chain& Add(Callback cb);
 
     Chain& Add(Task task, Callback cb = {});
