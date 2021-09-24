@@ -519,7 +519,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
                 auto it = std::find_if(teams.cbegin(), teams.cend(), 
                     [&player = cmd.player_](const Team& team) {
                         auto it = std::find_if(team.players.cbegin(), team.players.cend()
-                            , std::bind(utils::IsEqualUtf8, player, std::placeholders::_1));
+                            , std::bind(utils::utf8::IsEqual, player, std::placeholders::_1));
                         return it != team.players.cend();
                     });
                 if (it == teams.cend()) {

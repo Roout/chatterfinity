@@ -3,6 +3,7 @@
 #include "Environment.hpp"
 
 #include <sstream>
+#include <cctype> // std::tolower
 
 #include <cassert>
 #ifdef _WIN32
@@ -187,10 +188,12 @@ void Console::Run() {
 }
 
 void Console::Dispatch(std::string_view cmd, const command::Args& args) {
-    auto lowerCmd = utils::AsLowerCase(std::string{ cmd });
+    std::string lowerCaseCmd{ cmd };
+    std::transform(lowerCaseCmd.cbegin(), lowerCaseCmd.cend()
+        , lowerCaseCmd.begin(), [](char c) { return std::tolower(c); });
 
-    if (auto handle = translator_.GetHandle(lowerCmd); handle) {
-        Write("[console] call handle for:", lowerCmd, '\n');
+    if (auto handle = translator_.GetHandle(lowerCaseCmd); handle) {
+        Write("[console] call handle for:", lowerCaseCmd, '\n');
         // proccess command here
         std::invoke(*handle, args);
     }
@@ -202,7 +205,7 @@ void Console::Dispatch(std::string_view cmd, const command::Args& args) {
             params.push_back(command::ParamData{ 
                 std::string(k), std::string(v) });
         }        
-        command::RawCommand raw { std::move(lowerCmd), std::move(params) };
+        command::RawCommand raw { std::move(lowerCaseCmd), std::move(params) };
         if (!inbox_->TryPush(std::move(raw))) {
             // abandon the command
             Write("[console] fail to proccess command:"

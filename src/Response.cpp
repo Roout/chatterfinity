@@ -55,12 +55,12 @@ Header ParseHeader(std::string_view src) {
         raw.remove_prefix(split + 1);
         raw = utils::Trim(raw, " ");
 
-        if (utils::IsEqual(key, Header::kContentLengthKey)) {
+        if (utils::ascii::IsEqual(key, Header::kContentLengthKey)) {
             result.bodyKind_ = BodyContentKind::kContentLengthSpecified;
             result.bodyLength_ = utils::ExtractInteger(raw);
         }
-        else if (utils::IsEqual(key, Header::kTransferEncodedKey) 
-            && utils::IsEqual(raw, Header::kTransferEncodedValue)         
+        else if (utils::ascii::IsEqual(key, Header::kTransferEncodedKey) 
+            && utils::ascii::IsEqual(raw, Header::kTransferEncodedValue)         
         ) {
             result.bodyKind_ = BodyContentKind::kChunkedTransferEncoded;
             result.bodyLength_ = std::string_view::npos;
