@@ -5,236 +5,13 @@
 #include "Request.hpp"
 #include "Chain.hpp"
 #include "Connection.hpp"
+#include "Domain.hpp"
 
-#include <iomanip> // std::quoted
 #include <stdexcept>
-#include <type_traits>
 
 #include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
 
-namespace {
-
-template<typename T>
-struct is_extractable_value {
-    static constexpr bool value { 
-        std::is_same_v<T, bool>
-        || std::is_same_v<T, std::uint64_t>
-        || std::is_same_v<T, int>
-        || std::is_same_v<T, std::string>
-    };
-};
-
-// utility function
-// works for: bool, string, int, uint64_t
-template<typename T, 
-    typename = std::enable_if_t<is_extractable_value<T>::value>
->
-bool Copy(const rapidjson::Value& src, T& dst, const char *key) {
-    if (auto it = src.FindMember(key); it != src.MemberEnd()) {
-        if constexpr (std::is_same_v<bool, T>) {
-            dst = it->value.GetBool();
-            return true;
-        }
-        else if constexpr (std::is_same_v<std::uint64_t, T>) {
-            dst = it->value.GetUint64();
-            return true;
-        }
-        else if constexpr (std::is_same_v<int, T>) {
-            dst = it->value.GetInt();
-            return true;
-        }
-        else if constexpr (std::is_same_v<std::string, T>) {
-            dst = it->value.GetString();
-            return true;
-        }
-    }
-    return false;
-}
-
-struct RealmStatusResponse {
-    std::string name;
-    std::string queue;
-    std::string status;
-
-    bool Parse(const std::string& buffer) {
-        rapidjson::Document json; 
-        json.Parse(buffer.data(), buffer.size());
-        if (!json.HasMember("realms")) { 
-            return false;
-        }
-        const auto realms = json["realms"].GetArray();
-        assert(!realms.Empty() && "Empty realms");
-
-        // TODO: check whether the first realm is always 
-        // the one we needed
-        const auto& front = *realms.Begin();
-        if (!front.HasMember("name")) { 
-            return false;
-        }
-        name = front["name"].GetString();
-
-        if (!json.HasMember("has_queue")) { 
-            return false;
-        }
-        const auto hasQueue = json["has_queue"].GetBool();
-        queue = hasQueue? "has queue": "no queue";
-
-        if (!json.HasMember("status") || !json["status"].HasMember("type")) { 
-            return false;
-        }
-        status = json["status"]["type"].GetString();
-
-        return true;
-    }
-
-};
-
-std::string to_string(const RealmStatusResponse& realm) {
-    return realm.name + "(" + realm.status + "): " + realm.queue;
-}
-
-struct TokenResponse {
-    std::string content;
-    std::string type;
-    std::uint64_t expires;
-
-    bool Parse(const std::string& buffer) {
-        rapidjson::Document json; 
-        json.Parse(buffer.data(), buffer.size());
-
-        if (!::Copy(json, content, "access_token")) {
-            return false;
-        }
-        if (!::Copy(json, type, "token_type")) {
-            return false;
-        }
-        if (!::Copy(json, expires, "expires_in")) {
-            return false;
-        }
-
-        assert(type == "bearer" 
-            && "Unexpected token type. Blizzard API may be changed!");
-
-        return true;
-    }
-
-};
-
-std::string to_string(const TokenResponse& token) {
-    return token.content;
-}
-
-struct Team {
-    std::string name; // team name
-    std::string realm; // realm slug
-    std::vector<std::string> players; // names of players
-    int rank;
-    int rating;
-};
-
-std::string to_string(const Team& team) {
-    std::stringstream ss;
-    ss << std::quoted(team.name, '\'') << " " << team.realm << " " 
-        << std::to_string(team.rank) << " " << std::to_string(team.rating) << " "
-        << std::to_string(team.players.size()) << ":";
-    for (const auto& player: team.players) {
-        ss << " " << std::quoted(player, '\'');
-    }
-    return ss.str();
-}
-
-struct ArenaResponse {
-    std::vector<Team> teams;
-
-    bool Parse(const std::string& buffer) {
-        rapidjson::Document json; 
-        json.Parse(buffer.data(), buffer.size());
-
-        auto entries_it = json.FindMember("entries");
-        if (entries_it == json.MemberEnd()) {
-            return false;
-        }
-        const auto& entries = entries_it->value.GetArray();
-        for (auto&& entry: entries) {
-            Team team;
-            if (!::Copy(entry, team.rank, "rank")) {
-                return false;
-            }
-            if (!::Copy(entry, team.rating, "rating")) {
-                return false;
-            }
-
-            auto team_it = entry.FindMember("team");
-            if (team_it == entry.MemberEnd()) {
-                return false;
-            }
-            const auto& teamValue = team_it->value;
-            if (!ParseTeam(teamValue, team)) {
-                return false;
-            }
-            teams.emplace_back(std::move(team));
-        }
-        return true;
-    }
-
-private:
-    bool ParseTeam(const rapidjson::Value& teamValue, Team& team) {
-        if (!::Copy(teamValue, team.name, "name")) {
-            return false;
-        }
-        // realm
-        auto realm_it = teamValue.FindMember("realm");
-        if (realm_it == teamValue.MemberEnd()) {
-            return false;
-        }
-        if (!::Copy(realm_it->value, team.realm, "slug")) {
-            return false;
-        }
-        // members
-        auto members_it = teamValue.FindMember("members");
-        if (members_it == teamValue.MemberEnd()) {
-            // team has no members
-            return true;
-        }
-        const auto& members = members_it->value.GetArray();
-        
-        team.players.resize(members.Size());
-        size_t i = 0;
-        for (auto&& player: members) {
-            auto character_it = player.FindMember("character");
-            if (character_it == player.MemberEnd()) {
-                return false;
-            }
-            if (!::Copy(character_it->value, team.players[i], "name")) {
-                return false;
-            }
-            ++i;
-        }
-        return true;
-    }
-};
-
-struct Realm {
-    std::uint64_t id;
-    std::string name;
-    std::string queue;
-    std::string status;
-
-    Realm(std::uint64_t id)
-        : id { id } {}
-
-    Realm(std::uint64_t id, std::string name, std::string queue, std::string status)
-        : id { id }
-        , name { std::move(name) }
-        , queue { std::move(queue) }
-        , status { std::move(status) }
-    {}
-    
-};
-
-} // namespace {
+namespace domain = blizzard::domain;
 
 namespace service {
 
@@ -278,19 +55,20 @@ void Blizzard::ResetWork() {
 
 void Blizzard::Run() {
     for (size_t i = 0; i < kThreads; i++) {
-        threads_.emplace_back([this](){
+        auto worker = [this]() {
             for (;;) {
                 try {
                     context_->run();
                     break;
                 }
                 catch (std::exception& ex) {
-                    Console::Write(
-                        "[blizzard]: --error: context raises an exceptiom:"
+                    Console::Write("[blizzard]: "
+                        "--error: context raises an exceptiom:"
                         , ex.what(), '\n');
                 }
             }
-        });
+        };
+        threads_.emplace_back(std::move(worker));
     }
 }
 
@@ -317,7 +95,9 @@ void Blizzard::QueryRealm(Callback continuation) {
         const auto realmId = json["id"].GetUint64();
         Console::Write("[blizzard] realm id: [", realmId, "]\n");
         // update realm id
-        service->realm_.Emplace<Realm>({realmId}, CacheSlot::Duration{ 24 * 60 * 60 });
+        service->realm_.Emplace<domain::Realm>(
+            { realmId }
+            , CacheSlot::Duration{ 24 * 60 * 60 });
     };
 
     auto connect = [connection](Chain::Callback cb) {
@@ -353,7 +133,7 @@ void Blizzard::QueryRealmStatus(command::RealmStatus cmd
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
-    auto request = blizzard::RealmStatus{ realm_.Get<Realm>()->id
+    auto request = blizzard::RealmStatus{ realm_.Get<domain::Realm>()->id
         , *token_.Get<std::string>() }.Build();
 
     auto readCallback = [weak = utils::WeakFrom<HttpConnection>(connection)
@@ -365,19 +145,21 @@ void Blizzard::QueryRealmStatus(command::RealmStatus cmd
 
         const auto [head, body] = shared->AcquireResponse();
 
-        RealmStatusResponse realmResponse;
         std::string message;
-        if (!realmResponse.Parse(body)) {
+        if (domain::RealmStatus response; 
+            !domain::Parse(body, response)) 
+        {
             message = "sorry, can't provide the answer. Try later please!";
             Console::Write("[blizzard] can't parse response: [", body, "]\n");
         }
         else {
-            message = to_string(realmResponse);
+            message = domain::to_string(response);
             // cache realm's data
-            Realm realm { service->realm_.Get<Realm>()->id
-                , realmResponse.name
-                , realmResponse.queue
-                , realmResponse.status
+            domain::Realm realm { 
+                service->realm_.Get<domain::Realm>()->id
+                , response.name
+                , response.queue
+                , response.status
             };
             service->realm_.Emplace(std::move(realm), CacheSlot::Duration{24 * 60 * 60 });
         }
@@ -443,11 +225,13 @@ void Blizzard::AcquireToken(Callback continuation) {
         auto shared = weak.lock();
         const auto [head, body] = shared->AcquireResponse();
         
-        TokenResponse token;
-        token.Parse(body);
+        domain::Token token;
+        if (!domain::Parse(body, token)) {
+            Console::Write("[blizzard] --error: Cannot parse token!\n");
+        }
 
-        Console::Write("[blizzard] extracted token: ["
-            , to_string(token), "]\n");
+        Console::Write("[blizzard] "
+            "extracted token: [", domain::to_string(token), "]\n");
         service->token_.Emplace<std::string>(std::move(token.content)
             , CacheSlot::Duration(token.expires));
     };
@@ -475,11 +259,11 @@ void Blizzard::AcquireToken(Callback continuation) {
 void Blizzard::Invoker::Execute(command::RealmID) {
     auto completionToken = [blizzard = blizzard_]() {
         Console::Write("[blizzard] acquire realm id:"
-            , blizzard->realm_.Get<Realm>()->id, '\n');
+            , blizzard->realm_.Get<domain::Realm>()->id, '\n');
     };
 
     if (blizzard_->realm_.IsValid()) {
-        assert(blizzard_->realm_.Get<Realm>());
+        assert(blizzard_->realm_.Get<domain::Realm>());
         std::invoke(completionToken);
         return;
     }
@@ -508,7 +292,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         assert(cache.IsValid());
 
         std::string message;
-        if (const auto& teams = cache.Get<ArenaResponse>()->teams; 
+        if (const auto& teams = cache.Get<domain::Arena>()->teams; 
             teams.empty()
         ) {
             message = "Sorry, can't provide the answer. Try later please!";
@@ -516,14 +300,18 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         else {
             // player name is not provided
             if (!cmd.player_.empty()) {
-                auto it = std::find_if(teams.cbegin(), teams.cend(), 
-                    [&player = cmd.player_](const Team& team) {
-                        auto it = std::find_if(team.players.cbegin(), team.players.cend()
-                            , std::bind(utils::utf8::IsEqual, player, std::placeholders::_1));
-                        return it != team.players.cend();
-                    });
-                if (it == teams.cend()) {
-                    message = "Sorry, no team has a player with '" + cmd.player_ + "' nick!";
+                auto search = [&player = cmd.player_](const domain::Team& team) {
+                    auto it = std::find_if(team.playerNames.cbegin()
+                        , team.playerNames.cend()
+                        , std::bind(utils::utf8::IsEqual, player, std::placeholders::_1));
+                    return it != team.playerNames.cend();
+                };
+                
+                if (auto it = std::find_if(teams.cbegin(), teams.cend(), search);
+                    it == teams.cend()
+                ) {
+                    message = "Sorry, no team has a player with '" 
+                        + cmd.player_ + "' nick!";
                 }
                 else {
                     std::stringstream ss;
@@ -536,7 +324,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
             }
             else {
                 // Create default message with top-1 team
-                message = to_string(teams.front());
+                message = domain::to_string(teams.front());
                 Console::Write("[blizzard] arena teams:", teams.size()
                     , "; first 2x2 rating:", message, "\n");
             }
@@ -599,11 +387,11 @@ void Blizzard::Invoker::Execute(command::Arena command) {
             Console::Write("[blizzard] can't get response: body = \"", body, "\"\n");
             constexpr std::chrono::seconds kLifetime { 30 * 60 };
             // emplace empty arena to not repeat the request too frequently
-            service->arena_.Emplace(ArenaResponse{}, kLifetime);
+            service->arena_.Emplace(domain::Arena{}, kLifetime);
         }
 
-        ArenaResponse response;
-        if (!response.Parse(body)) {
+        domain::Arena response;
+        if (!domain::Parse(body, response)) {
             Console::Write("[blizzard] can't parse fully arena response\n");
         }
         else {
@@ -641,15 +429,16 @@ void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
     }
 
     if (!blizzard_->realm_.IsValid()) {
-        assert(blizzard_->realm_.Get<Realm>());
         // 2. Get Realm ID
         chain->Add([blizzard = blizzard_](Chain::Callback cb) {
             blizzard->QueryRealm(std::move(cb));
         });
         // 3. Notify about Realm ID
         chain->Add([blizzard = blizzard_](){
+            assert(blizzard->realm_.Get<domain::Realm>());
+
             Console::Write("[blizzard] acquired realm id:", 
-                blizzard->realm_.Get<Realm>()->id, '\n');
+                blizzard->realm_.Get<domain::Realm>()->id, '\n');
         });
     }
 
