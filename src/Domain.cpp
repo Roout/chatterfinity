@@ -65,8 +65,6 @@ bool Parse(const std::string& src, RealmStatus& dst) {
     const auto realms = json["realms"].GetArray();
     assert(!realms.Empty() && "Empty realms");
 
-    // TODO: check whether the first realm is always 
-    // the one we needed
     const auto& front = *realms.Begin();
     if (!front.HasMember("name")) { 
         return false;
