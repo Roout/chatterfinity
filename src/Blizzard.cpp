@@ -164,10 +164,10 @@ void Blizzard::QueryRealmStatus(command::RealmStatus cmd
         }
         
         // TODO: update this temporary solution base on IF
-        if (cmd.user_.empty()) { // the sourceof the command is 
+        if (cmd.user_.empty()) { // the source of the command is console
             Console::Write("[blizzard] recv:", message, '\n');
         }
-        else {
+        else { // the source of the command is twitch
             message = "@" + cmd.user_ + ", " + message;
             command::RawCommand raw { "chat", { 
                 command::ParamData { "channel", cmd.channel_ }
