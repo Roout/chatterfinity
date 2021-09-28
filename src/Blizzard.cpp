@@ -80,7 +80,7 @@ void Blizzard::QueryRealm(Callback continuation) {
         context_, ssl_ , kHost, kService, GenerateId()
     );
 
-    assert(token_.IsValid());
+    assert(token_.Get<std::string>());
     auto request = blizzard::Realm{ *token_.Get<std::string>() }.Build();
 
     auto readCallback = [weak = utils::WeakFrom<HttpConnection>(connection)
@@ -123,10 +123,9 @@ void Blizzard::QueryRealm(Callback continuation) {
 void Blizzard::QueryRealmStatus(command::RealmStatus cmd
     , Callback continuation
 ) {
-    // FIXME: can be valid when the `QueryRealmStatus` is posted to execution
-    // but invalidated when being executed!
-    assert(token_.IsValid());
-    assert(realm_.IsValid());
+    // NOTE: can be invalid (was valid before) but not empty!
+    assert(token_.Get<std::string>());
+    assert(realm_.Get<domain::Realm>());
     constexpr const char * const kHost { "eu.api.blizzard.com" };
     constexpr const char * const kService { "https" };
     
@@ -258,6 +257,7 @@ void Blizzard::AcquireToken(Callback continuation) {
 
 void Blizzard::Invoker::Execute(command::RealmID) {
     auto completionToken = [blizzard = blizzard_]() {
+        assert(blizzard->realm_.Get<domain::Realm>());
         Console::Write("[blizzard] acquire realm id:"
             , blizzard->realm_.Get<domain::Realm>()->id, '\n');
     };
@@ -289,7 +289,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
 
     auto handleResponse = [service = blizzard_, cmd = std::move(command)]() {
         const auto& cache = service->arena_;
-        assert(cache.IsValid());
+        assert(cache.Get<domain::Arena>());
 
         std::string message;
         if (const auto& teams = cache.Get<domain::Arena>()->teams; 
