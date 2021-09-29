@@ -204,12 +204,12 @@ std::string to_string(const Team& team) {
     return ss.str();
 }
 
-std::string to_string(const Arena& src) {
+std::string to_string(const Arena&) {
     assert(false && "TODO: not implemented");
     return {};
 }
 
-std::string to_string(const Realm& src) {
+std::string to_string(const Realm&) {
     assert(false && "TODO: not implemented");
     return {};
 }
