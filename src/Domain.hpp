@@ -51,6 +51,13 @@ struct Realm {
     {}    
 };
 
+enum class Domain : std::uint8_t {
+    kToken,
+    kArena,
+    kRealm
+};
+
+
 bool Parse(const std::string& src, RealmStatus& dst);
 bool Parse(const std::string& src, Token& dst);
 bool Parse(const std::string& src, Arena& dst);

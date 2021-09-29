@@ -80,8 +80,9 @@ void Blizzard::QueryRealm(Callback continuation) {
         context_, ssl_ , kHost, kService, GenerateId()
     );
 
-    assert(token_.Get<std::string>());
-    auto request = blizzard::Realm{ *token_.Get<std::string>() }.Build();
+    const auto& token = cache_[Domain::kToken];
+    assert(token.Get<std::string>());
+    auto request = blizzard::Realm{ *token.Get<std::string>() }.Build();
 
     auto readCallback = [weak = utils::WeakFrom<HttpConnection>(connection)
         , service = this
@@ -95,7 +96,8 @@ void Blizzard::QueryRealm(Callback continuation) {
         const auto realmId = json["id"].GetUint64();
         Console::Write("[blizzard] realm id: [", realmId, "]\n");
         // update realm id
-        service->realm_.Emplace<domain::Realm>(
+        auto& realm = service->cache_[Domain::kRealm];
+        realm.Insert<domain::Realm>(
             { realmId }
             , CacheSlot::Duration{ 24 * 60 * 60 });
     };
@@ -124,16 +126,19 @@ void Blizzard::QueryRealmStatus(command::RealmStatus cmd
     , Callback continuation
 ) {
     // NOTE: can be invalid (was valid before) but not empty!
-    assert(token_.Get<std::string>());
-    assert(realm_.Get<domain::Realm>());
+    const auto& realm = cache_[Domain::kRealm];
+    const auto& token = cache_[Domain::kToken];
+    assert(token.Get<std::string>());
+    assert(realm.Get<domain::Realm>());
+
     constexpr const char * const kHost { "eu.api.blizzard.com" };
     constexpr const char * const kService { "https" };
     
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
-    auto request = blizzard::RealmStatus{ realm_.Get<domain::Realm>()->id
-        , *token_.Get<std::string>() }.Build();
+    auto request = blizzard::RealmStatus{ realm.Get<domain::Realm>()->id
+        , *token.Get<std::string>() }.Build();
 
     auto readCallback = [weak = utils::WeakFrom<HttpConnection>(connection)
         , service = this
@@ -153,14 +158,15 @@ void Blizzard::QueryRealmStatus(command::RealmStatus cmd
         }
         else {
             message = domain::to_string(response);
+            auto& cached = service->cache_[Domain::kRealm];
             // cache realm's data
             domain::Realm realm { 
-                service->realm_.Get<domain::Realm>()->id
+                cached.Get<domain::Realm>()->id
                 , response.name
                 , response.queue
                 , response.status
             };
-            service->realm_.Emplace(std::move(realm), CacheSlot::Duration{24 * 60 * 60 });
+            cached.Insert(std::move(realm), CacheSlot::Duration{24 * 60 * 60 });
         }
         
         // TODO: update this temporary solution base on IF
@@ -231,7 +237,8 @@ void Blizzard::AcquireToken(Callback continuation) {
 
         Console::Write("[blizzard] "
             "extracted token: [", domain::to_string(token), "]\n");
-        service->token_.Emplace<std::string>(std::move(token.content)
+        auto& cached = service->cache_[Domain::kToken];
+        cached.Insert<std::string>(std::move(token.content)
             , CacheSlot::Duration(token.expires));
     };
 
@@ -257,19 +264,24 @@ void Blizzard::AcquireToken(Callback continuation) {
 
 void Blizzard::Invoker::Execute(command::RealmID) {
     auto completionToken = [blizzard = blizzard_]() {
-        assert(blizzard->realm_.Get<domain::Realm>());
+        const auto& realm = blizzard->cache_[Domain::kRealm];
+        assert(realm.Get<domain::Realm>());
         Console::Write("[blizzard] acquire realm id:"
-            , blizzard->realm_.Get<domain::Realm>()->id, '\n');
+            , realm.Get<domain::Realm>()->id, '\n');
     };
 
-    if (blizzard_->realm_.IsValid()) {
-        assert(blizzard_->realm_.Get<domain::Realm>());
+    if (const auto& realm = blizzard_->cache_[Domain::kRealm];
+        realm.IsValid()) 
+    {
+        assert(realm.Get<domain::Realm>());
         std::invoke(completionToken);
         return;
     }
 
     auto chain = std::make_shared<Chain>(blizzard_->context_);
-    if (!blizzard_->token_.IsValid()) {
+    if (const auto& token = blizzard_->cache_[Domain::kToken];
+        !token.IsValid()) 
+    {
         chain->Add([blizzard = blizzard_](Chain::Callback cb) {
             blizzard->AcquireToken(std::move(cb));
         });
@@ -288,11 +300,11 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         , command.player_, "]\n");
 
     auto handleResponse = [service = blizzard_, cmd = std::move(command)]() {
-        const auto& cache = service->arena_;
-        assert(cache.Get<domain::Arena>());
+        const auto& arena = service->cache_[Domain::kArena];
+        assert(arena.Get<domain::Arena>());
 
         std::string message;
-        if (const auto& teams = cache.Get<domain::Arena>()->teams; 
+        if (const auto& teams = arena.Get<domain::Arena>()->teams; 
             teams.empty()
         ) {
             message = "Sorry, can't provide the answer. Try later please!";
@@ -347,7 +359,9 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         }
     };
 
-    if (blizzard_->arena_.IsValid()) {
+    if (const auto& arena = blizzard_->cache_[Domain::kArena];
+        arena.IsValid()) 
+    {
         // just use info from the cache
         std::invoke(handleResponse);
         return;
@@ -366,7 +380,9 @@ void Blizzard::Invoker::Execute(command::Arena command) {
     };
 
     auto write = [connection, service = blizzard_](Chain::Callback cb) {
-        auto token = *service->token_.Get<std::string>();
+        const auto& tokenSlot = service->cache_[Domain::kToken];
+        const auto& token = *tokenSlot.Get<std::string>();
+        
         constexpr uint64_t kSeason { 1 };
         constexpr uint64_t kTeamSize { 2 };
         auto request = blizzard::Arena(kSeason, kTeamSize, token).Build();
@@ -386,8 +402,9 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         if (head.statusCode_ != 200) {
             Console::Write("[blizzard] can't get response: body = \"", body, "\"\n");
             constexpr std::chrono::seconds kLifetime { 30 * 60 };
+            auto& arena = service->cache_[Domain::kArena];
             // emplace empty arena to not repeat the request too frequently
-            service->arena_.Emplace(domain::Arena{}, kLifetime);
+            arena.Insert(domain::Arena{}, kLifetime);
         }
 
         domain::Arena response;
@@ -398,13 +415,16 @@ void Blizzard::Invoker::Execute(command::Arena command) {
             Console::Write("[blizzard] parsed arena response successfully\n");
         }
         constexpr std::chrono::seconds kLifetime { 1 * 60 * 60 };
+        auto& arena = service->cache_[Domain::kArena];
         // Can emplace partially parsed arena to not repeat the request too frequently
         // because Blizzard API may be changed
-        service->arena_.Emplace(std::move(response), kLifetime);
+        arena.Insert(std::move(response), kLifetime);
     };
 
     auto chain = std::make_shared<Chain>(blizzard_->context_);
-    if (!blizzard_->token_.IsValid()) {
+    if (auto const& token = blizzard_->cache_[Domain::kToken];
+        !token.IsValid()) 
+    {
         chain->Add([service = blizzard_](Chain::Callback cb) {
             service->AcquireToken(std::move(cb));
         });
@@ -419,7 +439,9 @@ void Blizzard::Invoker::Execute(command::Arena command) {
 void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
     auto chain = std::make_shared<Chain>(blizzard_->context_);
 
-    if (!blizzard_->token_.IsValid()) {
+    if (auto const& token = blizzard_->cache_[Domain::kToken];
+        !token.IsValid()) 
+    {
         // 1. Acquire token
         chain->Add([blizzard = blizzard_](Chain::Callback cb) {
             // `cb` is used as a signal that the initiated 
@@ -428,17 +450,19 @@ void Blizzard::Invoker::Execute(command::RealmStatus cmd) {
         });
     }
 
-    if (!blizzard_->realm_.IsValid()) {
+    if (auto const& realm = blizzard_->cache_[Domain::kRealm];
+        !realm.IsValid()) 
+    {
         // 2. Get Realm ID
         chain->Add([blizzard = blizzard_](Chain::Callback cb) {
             blizzard->QueryRealm(std::move(cb));
         });
         // 3. Notify about Realm ID
-        chain->Add([blizzard = blizzard_](){
-            assert(blizzard->realm_.Get<domain::Realm>());
+        chain->Add([&realm](){
+            assert(realm.Get<domain::Realm>());
 
             Console::Write("[blizzard] acquired realm id:", 
-                blizzard->realm_.Get<domain::Realm>()->id, '\n');
+                realm.Get<domain::Realm>()->id, '\n');
         });
     }
 
