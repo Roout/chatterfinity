@@ -8,22 +8,7 @@
 
 namespace utils {
 
-size_t ExtractInteger(std::string_view sequence, size_t radix) {
-    using namespace std::literals;
-    size_t value;
-    const auto [parsed, ec] = std::from_chars(std::data(sequence)
-        , std::data(sequence) + std::size(sequence)
-        , value
-        , radix);
-    if (ec != std::errc()) {
-        auto message = "std::from_chars met unexpected input.\n\tBefore parsing: "s 
-            + std::string{ sequence.data(), sequence.size() } 
-            + "\n\tAfter parsing: "s 
-            + parsed;
-        throw std::logic_error(message);
-    }
-    return value;
-}
+namespace ascii {
 
 // case insensetive comparator
 bool IsEqual(std::string_view lhs, std::string_view rhs) noexcept {
@@ -34,7 +19,11 @@ bool IsEqual(std::string_view lhs, std::string_view rhs) noexcept {
     return isEqual;
 }
 
-bool IsEqualUtf8(std::string_view lhs, std::string_view rhs) {
+} // namespace ascii
+
+namespace utf8 {
+
+bool IsEqual(std::string_view lhs, std::string_view rhs) {
     if (lhs.size() != rhs.size()) return false;
     if (lhs.empty()) return true;
     
@@ -83,9 +72,23 @@ bool IsEqualUtf8(std::string_view lhs, std::string_view rhs) {
     return isEqual;
 }
 
-std::string AsLowerCase(std::string str) noexcept {
-    for (auto&c: str) c = std::tolower(c);
-    return str;
+} // namespace utf8
+
+size_t ExtractInteger(std::string_view sequence, size_t radix) {
+    using namespace std::literals;
+    size_t value;
+    const auto [parsed, ec] = std::from_chars(std::data(sequence)
+        , std::data(sequence) + std::size(sequence)
+        , value
+        , radix);
+    if (ec != std::errc()) {
+        auto message = "std::from_chars met unexpected input.\n\tBefore parsing: "s 
+            + std::string{ sequence.data(), sequence.size() } 
+            + "\n\tAfter parsing: "s 
+            + parsed;
+        throw std::logic_error(message);
+    }
+    return value;
 }
 
 std::string_view Trim(std::string_view text

@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <unordered_map>
 #include <string>
 #include <any>
 #include <mutex>
@@ -25,14 +26,14 @@ public:
     {}
 
     template<typename T>
-    void Emplace(T&& value, Duration /* in secs */ lifetime) {
+    void Insert(T&& value, Duration /* in secs */ lifetime) {
         std::lock_guard<std::mutex> lock{ mutex_ };
         content_.emplace<T>(std::forward<T>(value));
         update_ = chrono::steady_clock::now();
         duration_ = lifetime;
     }
 
-    bool IsValid() const noexcept {
+    bool IsValid() const {
         const auto now = chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock{ mutex_ };
         return chrono::duration_cast<Duration>(now - update_) < duration_;
@@ -45,9 +46,8 @@ public:
     }
 
 private:
-
     std::any content_ {};
     TimePoint update_ { chrono::steady_clock::now() };
-    Duration  duration_ { 0 };
-    mutable std::mutex  mutex_;
+    Duration duration_ { 0 };
+    mutable std::mutex mutex_;
 };

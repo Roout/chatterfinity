@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <unordered_map>
+
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 
@@ -13,6 +15,10 @@ namespace ssl = boost::asio::ssl;
 using boost::asio::ip::tcp;
 
 class Config;
+
+namespace blizzard::domain {
+    enum class Domain : std::uint8_t;
+}
 
 namespace service {
 
@@ -59,14 +65,12 @@ private:
     class Invoker;
 
     using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
+    using Domain = blizzard::domain::Domain;
 
     static constexpr size_t kThreads { 2 };
     std::vector<std::thread> threads_;
 
-    // TODO: Add everything to cache-table
-    CacheSlot token_;
-    CacheSlot arena_;
-    CacheSlot realm_;
+    std::unordered_map<Domain, CacheSlot> cache_;
 
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;

@@ -6,13 +6,17 @@
 
 namespace utils {
     
-size_t ExtractInteger(std::string_view sequence, size_t radix = 10);
+namespace ascii {
 
 /**
  * case insensetive comparator
  */
 bool IsEqual(std::string_view lhs, std::string_view rhs) noexcept;
 
+} // namespace ascii {
+
+namespace utf8 {
+    
 /**
  * Compare for case insensitive equality of two utf8 byte strings.
  * 
@@ -24,9 +28,11 @@ bool IsEqual(std::string_view lhs, std::string_view rhs) noexcept;
  * e.g. the Greek uppercase letter 'Σ' has two lowercase forms, 
  * depending on the position in a word: 'σ' and 'ς'
 */
-bool IsEqualUtf8(std::string_view lhs, std::string_view rhs);
+bool IsEqual(std::string_view lhs, std::string_view rhs);
 
-std::string AsLowerCase(std::string str) noexcept;
+} // namespace utf8 
+
+size_t ExtractInteger(std::string_view sequence, size_t radix = 10);
 
 std::string_view Trim(std::string_view text
     , std::string_view exclude = " \n\r\t\v\0"
