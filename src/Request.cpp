@@ -19,10 +19,10 @@ namespace {
             result.reserve(length);
             for (size_t i = 0; i + lastOctets < src.size(); i += 3) {
                 const uint32_t merged = (src[i] << 16) | (src[i + 1] << 8) | src[i + 2];
-                result.push_back(TABLE[(merged >> 18) & 0x3F]);
-                result.push_back(TABLE[(merged >> 12) & 0x3F]);
-                result.push_back(TABLE[(merged >> 6 ) & 0x3F]);
-                result.push_back(TABLE[(merged >> 0 ) & 0x3F]);
+                result.push_back(kTable[(merged >> 18) & 0x3F]);
+                result.push_back(kTable[(merged >> 12) & 0x3F]);
+                result.push_back(kTable[(merged >> 6 ) & 0x3F]);
+                result.push_back(kTable[(merged >> 0 ) & 0x3F]);
             }
             if (lastOctets == 1) {
                 /*
@@ -30,8 +30,8 @@ namespace {
                     final unit of encoded output will be two characters followed by
                     two "=" padding characters.
                 */
-                result.push_back(TABLE[(src.back() >> 2) & 0x3F]);
-                result.push_back(TABLE[(src.back() << 4) & 0x3F]);
+                result.push_back(kTable[(src.back() >> 2) & 0x3F]);
+                result.push_back(kTable[(src.back() << 4) & 0x3F]);
                 result.append("==");
             }
             else if (lastOctets == 2) {
@@ -41,45 +41,23 @@ namespace {
                     one "=" padding character.
                 */
                 const uint32_t merged = (src[src.size() - 2] << 16) | (src.back() << 8);
-                result.push_back(TABLE[(merged >> 18) & 0x3F]);
-                result.push_back(TABLE[(merged >> 12) & 0x3F]);
-                result.push_back(TABLE[(merged >> 6 ) & 0x3F]);
+                result.push_back(kTable[(merged >> 18) & 0x3F]);
+                result.push_back(kTable[(merged >> 12) & 0x3F]);
+                result.push_back(kTable[(merged >> 6 ) & 0x3F]);
                 result.push_back('=');
             }
             return result;
         }
     private:
-        static constexpr std::string_view TABLE 
+        static constexpr std::string_view kTable 
             = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=";
-        static_assert(TABLE.size() == 65);
+        static_assert(kTable.size() == 65);
     };
 }
 
+namespace request {
+
 namespace twitch {
-
-// https://dev.twitch.tv/docs/authentication#sending-user-access-and-app-access-tokens
-std::string SendToken::Build() const {
-    const char *requestTemplate = 
-        "GET /helix/ HTTP/1.1\r\n"
-        "Host: api.twitch.tv\r\n"
-        "Authorization: Bearer %1%\r\n"
-        "\r\n";
-    
-    return (boost::format(requestTemplate) % token_).str();
-}
-
-std::string TokenRevoke::Build() const {
-    const char* bodyTemplate = "{\"client_id\":\"%1%\", \"token\":\"%2%\"}";
-    const auto body { (boost::format(bodyTemplate) % id_ % token_).str() };
-    const char *requestTemplate = 
-        "POST /oauth2/revoke HTTP/1.1\r\n"
-        "Host: id.twitch.tv\r\n"
-        "Content-Type: application/json\r\n"
-        "Content-Length: %1%\r\n"
-        "\r\n";
-
-    return (boost::format(requestTemplate) % body.size()).str() + body;
-}
 
 std::string Validation::Build() const {
     const char *requestTemplate = 
@@ -194,3 +172,5 @@ std::string Arena::Build() const {
 }
 
 }
+
+} // namespace request

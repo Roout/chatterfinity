@@ -227,7 +227,7 @@ void Twitch::Invoker::Execute(command::Pong) {
         Console::Write("[twitch] pong: irc connection is not established\n");
     }
     else {
-        auto pongRequest = twitch::Pong{}.Build();
+        auto pongRequest = request::twitch::Pong{}.Build();
         twitch_->irc_->ScheduleWrite(std::move(pongRequest), []() {
             Console::Write("[twitch] send pong request\n");
         });
@@ -256,7 +256,7 @@ void Twitch::Invoker::Execute(command::Validate) {
         connection->Connect(std::move(cb));
     };
 
-    auto request = twitch::Validation{ secret->token_ }.Build();
+    auto request = request::twitch::Validation{ secret->token_ }.Build();
     auto write = [connection, req = std::move(request)](Chain::Callback cb) {
         connection->ScheduleWrite(std::move(req), std::move(cb));
     };
@@ -303,7 +303,7 @@ void Twitch::Invoker::Execute(command::Join cmd) {
         Console::Write("[twitch] join: irc connection is not established\n");
     }
     else {
-        auto join = twitch::Join{cmd.channel_}.Build();
+        auto join = request::twitch::Join{cmd.channel_}.Build();
         twitch_->irc_->ScheduleWrite(std::move(join), []() {
             Console::Write("[twitch] send join channel request\n");
         });
@@ -318,7 +318,7 @@ void Twitch::Invoker::Execute(command::Chat cmd) {
         Console::Write("[twitch] chat: irc connection is not established\n");
     }
     else {
-        auto chat = twitch::Chat{cmd.channel_, cmd.message_}.Build();
+        auto chat = request::twitch::Chat{cmd.channel_, cmd.message_}.Build();
         Console::Write("[twitch] trying to send message:"
             , chat.substr(0, chat.size() - 2), "\n");
         twitch_->irc_->ScheduleWrite(std::move(chat), []() {
@@ -335,7 +335,7 @@ void Twitch::Invoker::Execute(command::Leave cmd) {
         Console::Write("[twitch] leave: irc connection is not established\n");
     }
     else {
-        auto leave = twitch::Leave{cmd.channel_}.Build();
+        auto leave = request::twitch::Leave{cmd.channel_}.Build();
         twitch_->irc_->ScheduleWrite(std::move(leave), []() {
             Console::Write("[twitch] send part channel request\n");
         });
@@ -354,12 +354,12 @@ void Twitch::Invoker::Execute(command::Login cmd) {
     const size_t id { 0 };
     twitch_->irc_ = std::make_shared<IrcConnection>(twitch_->context_
         , twitch_->ssl_
-        , twitch::kHost
-        , twitch::kService
+        , request::twitch::kHost
+        , request::twitch::kService
         , id
     );
 
-    auto request = twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
+    auto request = request::twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
     auto irc = twitch_->irc_.get();
     auto readCallback = [irc, twitch = twitch_](){
         twitch->HandleResponse(irc->AcquireResponse());
