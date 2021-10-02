@@ -83,6 +83,7 @@ public:
     void Execute(command::Shutdown);
     void Execute(command::Validate);
     void Execute(command::Login);
+    void Execute(command::Ping);
     void Execute(command::Pong);
     void Execute(command::Join);
     void Execute(command::Leave);

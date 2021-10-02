@@ -219,6 +219,19 @@ void Twitch::Invoker::Execute(command::Help) {
     assert(false && "TODO: not implemented");
 }
 
+void Twitch::Invoker::Execute(command::Ping cmd) {
+    assert(twitch_ && "Cannot be null");
+    if (!twitch_->irc_) {
+        Console::Write("[twitch] ping: irc connection is not established\n");
+    }
+    else {
+        auto pingRequest = request::twitch::Ping{cmd.channel_}.Build();
+        twitch_->irc_->ScheduleWrite(std::move(pingRequest), []() {
+            Console::Write("[twitch] send pong request\n");
+        });
+    }
+}
+
 void Twitch::Invoker::Execute(command::Pong) {
     assert(twitch_ && "Cannot be null");
     // TODO: still need to handle the case 

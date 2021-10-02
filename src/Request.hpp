@@ -47,6 +47,18 @@ namespace twitch {
         std::string user_;
     };
 
+    class Ping : public Query {
+    public:
+
+        Ping(const std::string& channel) 
+            : channel_ { channel } {}
+
+        std::string Build() const override;
+        
+    private:
+        std::string channel_;
+    };
+
     class Pong : public Query {
     public:
 

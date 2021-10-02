@@ -69,6 +69,15 @@ std::string Validation::Build() const {
     return (boost::format(requestTemplate) % token_).str();
 }
 
+/*
+< PING <channel>
+> :tmi.twitch.tv PONG tmi.twitch.tv :<channel>
+*/
+std::string Ping::Build() const {
+    using namespace std::literals;
+    return "PING "s + channel_ + "\r\n"s;
+}
+
 std::string Pong::Build() const {
     return "PONG :tmi.twitch.tv\r\n";
 }

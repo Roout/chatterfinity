@@ -107,6 +107,12 @@ namespace command {
         }
     };
 
+    struct Ping {
+        std::string channel_;
+        
+        static Ping Create(const service::Twitch&, const Args&);
+    };
+
     struct Chat {
         std::string channel_;
         std::string message_;
@@ -170,6 +176,7 @@ namespace command {
                 || std::is_same_v<T, Join>
                 || std::is_same_v<T, Leave>
                 || std::is_same_v<T, Pong>
+                || std::is_same_v<T, Ping>
                 || std::is_same_v<T, RealmStatus> // pass it to the next layer (App)
                 || std::is_same_v<T, Arena> // pass it to the next layer (App)
                 || std::is_same_v<T, Chat>

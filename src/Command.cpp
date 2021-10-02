@@ -135,6 +135,10 @@ namespace command {
         return { ::Find(args, "channel") };
     }
 
+    Ping Ping::Create(const service::Twitch&, const Args& args) {
+        return { ::Find(args, "channel") };
+    }
+
     Leave Leave::Create(const service::Twitch&, const Args& args) {
         return { ::Find(args, "channel") };
     }
