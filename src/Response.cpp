@@ -44,10 +44,15 @@ Header ParseHeader(std::string_view src) {
     result.bodyLength_ = std::string_view::npos;
     // extract FIELDS
     for (size_t start = statusEnd, finish = src.find_first_of(kFieldDelimiter.data(), statusEnd); 
-        finish != std::string::npos && start != finish;
+        start < src.size();
         finish = src.find_first_of(kFieldDelimiter.data(), start)
     ) {
-        std::string_view raw { src.data() + start, finish - start };
+        if (finish == std::string_view::npos) {
+            // reach end of the string
+            finish = src.size();
+        }
+
+        std::string_view raw {src.data() + start, finish - start };
         const auto split = raw.find_first_of(':');
         assert(split != std::string_view::npos && "Expected format: <key>:<value> not found");
 
