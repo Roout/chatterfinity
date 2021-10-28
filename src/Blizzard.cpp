@@ -15,7 +15,7 @@ namespace domain = blizzard::domain;
 
 namespace service {
 
-Blizzard::Blizzard(const Config *config, Container * outbox) 
+Blizzard::Blizzard(const Config *config, command::Queue * outbox) 
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }

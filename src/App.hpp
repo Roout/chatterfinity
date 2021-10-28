@@ -23,7 +23,6 @@ using boost::asio::ip::tcp;
 
 class App {
 public:
-    using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
 
     App() 
         : commands_ { kSentinel }
@@ -105,7 +104,7 @@ private:
 
     std::vector<std::thread> workers_;
     // common queue
-    Container commands_;
+    command::Queue commands_;
     Translator translator_;
     // configuration and settings
     Config config_;
