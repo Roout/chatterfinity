@@ -6,6 +6,9 @@
 #include <string>
 #include <cassert>
 
+#include "Environment.hpp"
+#include "ConcurrentQueue.hpp"
+
 namespace service {
     class Blizzard;
     class Twitch;
@@ -45,7 +48,11 @@ namespace command {
         std::vector<ParamData> params_;
     };
 
+    using Queue = CcQueue<command::RawCommand, cst::kQueueCapacity>;
+
     struct Alias {
+        static constexpr std::string_view kIdentity = "alias";
+
         std::string alias_;
         std::string command_;
         std::vector<ParamData> params_;
@@ -54,6 +61,8 @@ namespace command {
     };
 
     struct RealmID {
+        static constexpr std::string_view kIdentity = "realm-id";
+
         static RealmID Create(const service::Blizzard&, const Args&) {
             return {};
         }
@@ -63,6 +72,8 @@ namespace command {
     // passed by Twitch service to Blizzard
     // executed by Blizzard service: acquire data from the remote server
     struct RealmStatus {
+        static constexpr std::string_view kIdentity = "realm-status";
+
         std::string channel_;
         // initiator of the command
         std::string user_;
@@ -72,6 +83,8 @@ namespace command {
     };
 
     struct Arena {
+        static constexpr std::string_view kIdentity = "arena";
+
         std::string channel_;
         std::string user_;
         std::string player_;
@@ -81,18 +94,24 @@ namespace command {
     };
 
     struct AccessToken {
+        static constexpr std::string_view kIdentity = "token";
+
         static AccessToken Create(const service::Blizzard&, const Args&) {
             return {};
         }
     };
 
     struct Shutdown {
+        static constexpr std::string_view kIdentity = "shutdown";
+
         static Shutdown Create(const service::Console&, const Args&) {
             return {};
         }
     };
 
     struct Help {
+        static constexpr std::string_view kIdentity = "help";
+
         static Help Create(const service::Console&, const Args&) {
             return {};
         }
@@ -102,18 +121,24 @@ namespace command {
     };
     
     struct Pong {
+        static constexpr std::string_view kIdentity = "pong";
+
         static Pong Create(const service::Twitch&, const Args&) {
             return {};
         }
     };
 
     struct Ping {
+        static constexpr std::string_view kIdentity = "ping";
+
         std::string channel_;
         
         static Ping Create(const service::Twitch&, const Args&);
     };
 
     struct Chat {
+        static constexpr std::string_view kIdentity = "chat";
+
         std::string channel_;
         std::string message_;
 
@@ -121,6 +146,8 @@ namespace command {
     };
 
     struct Join {
+        static constexpr std::string_view kIdentity = "join";
+
         // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
         std::string channel_;
 
@@ -128,18 +155,24 @@ namespace command {
     };
 
     struct Leave {
+        static constexpr std::string_view kIdentity = "leave";
+
         std::string channel_;
 
         static Leave Create(const service::Twitch& ctx, const Args& params);
     };
 
     struct Validate {
+        static constexpr std::string_view kIdentity = "validate";
+
         static Validate Create(const service::Twitch&, const Args&) {
             return {};
         }
     };
 
     struct Login {
+        static constexpr std::string_view kIdentity = "login";
+
         std::string user_;
         std::string token_;
 
