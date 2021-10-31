@@ -40,21 +40,30 @@ Twitch::~Twitch() {
 }
 
 void Twitch::ResetWork() {
+    assert(shard_);
     work_.reset();
-    if (shard_) {
-        shard_->Reset();
-    }
+    shard_->Reset();
     // don't stop context to let it finish all jobs 
     // and shutdown connections gracefully
 }
 
 void Twitch::Run() {
     for (size_t i = 0; i < kThreads; i++) {
-        threads_.emplace_back([this] {
+        /**
+         * Source: https://en.cppreference.com/w/cpp/memory/shared_ptr
+         * All member functions (including copy constructor and copy assignment) 
+         * can be called by multiple threads on different instances of shared_ptr 
+         * without additional synchronization even if these instances are copies 
+         * and share ownership of the same object.
+         * 
+         * So, make copy of shared_ptr for each thread
+        */
+        threads_.emplace_back([ctx = this->context_] {
             for (;;) {
                 try {
-                    // TODO: clarify is there any data race around `shared_ptr`?
-                    context_->run();
+                    // Should be thread safe because `ctx` is another instance of shared_ptr and 
+                    // it's thread safe to call `io_context::run()`
+                    ctx->run();
                     break;
                 }
                 catch (std::exception& ex) {
