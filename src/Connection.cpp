@@ -190,6 +190,9 @@ void Connection::ScheduleWrite(std::string text, std::function<void()> onWrite) 
             self->Write();
         }
     };
+    // [CRITICAL SECTION]
+    // ASSUMED it's thread-safe to `post` completion token through `strand_`
+    // see https://stackoverflow.com/questions/51859895/is-boostasioio-servicepost-atomic/51862417
     boost::asio::post(strand_, std::move(deferredCallee));
 }
 
