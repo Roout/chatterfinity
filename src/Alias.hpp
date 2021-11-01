@@ -38,7 +38,7 @@ public:
 
     void Add(const Alias& alias, const Command& cmd, const Params& params);
 
-    std::optional<CommandLine> GetCommand(std::string_view alias);
+    std::optional<CommandLine> GetCommand(std::string_view alias) const;
 
     bool Remove(const Alias& alias) noexcept;
 
