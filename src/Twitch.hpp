@@ -42,6 +42,7 @@ public:
     >
     void Execute(Command&& cmd);
 
+    // Called only from App::~App
     void ResetWork();
 
     const Config* GetConfig() const noexcept {
@@ -63,7 +64,8 @@ private:
     
     // keep twitch's secret data
     const Config * const config_ { nullptr };
-
+    // It's been seen as readonly unique_ptr by App's worker threads
+    // Note: in call-chains it's only been dereferenced! (readonly access)
     std::unique_ptr<twitch::IrcShard> shard_;
 };
 
