@@ -24,7 +24,7 @@ public:
         table_.insert(commandList);
     }
 
-    std::optional<Handle> GetHandle(std::string_view command) const noexcept {
+    std::optional<Handle> GetHandle(std::string_view command) const {
         if (auto it = table_.find(command); it != table_.end()) {
             return std::make_optional<Handle>(it->second);
         }
@@ -32,7 +32,7 @@ public:
     }
 
     template<typename Command, typename Service>
-    static Handle CreateHandle(Service& ctx) noexcept {
+    static Handle CreateHandle(Service& ctx) {
         return [&ctx](const Params& params) mutable {
             Execute(Command::Create(ctx, params), ctx);
         };
