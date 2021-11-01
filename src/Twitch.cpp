@@ -41,8 +41,8 @@ Twitch::~Twitch() {
 
 void Twitch::ResetWork() {
     assert(shard_);
-    work_.reset();
     shard_->Reset();
+    work_.reset();
     // don't stop context to let it finish all jobs 
     // and shutdown connections gracefully
 }
