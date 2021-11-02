@@ -120,8 +120,8 @@ IrcShard::IrcShard(Twitch *service
     }
     , service_ { service }
     , commands_ { rawCommands }
-    , aliases_ { aliases }
     , translator_ {}
+    , aliases_ { aliases }
     , context_ { context }
     , ssl_ { ssl }
     , invoker_ { std::make_unique<Invoker>(this) }
@@ -348,7 +348,7 @@ void IrcShard::Invoker::Execute(command::Validate) {
     auto read = [connection](Chain::Callback cb) {
         connection->Read(std::move(cb));
     };
-    
+
     auto weak = utils::WeakFrom<HttpConnection>(connection);    
     auto readCallback = [weak]() {
         auto shared = weak.lock();
