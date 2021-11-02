@@ -149,14 +149,16 @@ IrcShard::IrcShard(Twitch *service
 }
 
 IrcShard::~IrcShard() {
-    Reset();
-}
+    assert(irc_.use_count() == 1L && "Unexpected behaviour."
+        " Callbacks (e.g. onwrite, onread, onconnect) saved in `irc_`"
+        " can have pointers to shard which is being destroyed now."
+        " Say Hello to UB!");
+};
 
 void IrcShard::Reset() {
-    if (irc_) {
-        irc_->ScheduleShutdown();
-        irc_.reset();
-    }
+    assert(irc_ && "Trying to read-modify-write to"
+        " pointer from different threads");
+    irc_->ScheduleShutdown();
 }
 
 // ===================== RESPONSE ================== //
@@ -278,37 +280,33 @@ IrcShard::Invoker::Invoker(IrcShard *shard)
     assert(shard);
 }
 
-
 void IrcShard::Invoker::Execute(command::Help) {
+    assert(shard_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
+
     assert(false && "TODO: not implemented");
 }
 
 void IrcShard::Invoker::Execute(command::Ping cmd) {
     assert(shard_ && "Cannot be null");
-    if (!shard_->irc_) {
-        Console::Write("[twitch] ping: irc connection is not established\n");
-    }
-    else {
-        auto pingRequest = request::twitch::Ping{cmd.channel_}.Build();
-        shard_->irc_->ScheduleWrite(std::move(pingRequest), []() {
-            Console::Write("[twitch] send pong request\n");
-        });
-    }
+    assert(shard_->irc_ && "irc connection is not established");
+
+    auto pingRequest = request::twitch::Ping{cmd.channel_}.Build();
+    shard_->irc_->ScheduleWrite(std::move(pingRequest), []() {
+        Console::Write("[twitch] send pong request\n");
+    });
 }
 
 void IrcShard::Invoker::Execute(command::Pong) {
     assert(shard_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
+
     // TODO: still need to handle the case 
-    // when `irc_` is alive but failed [re-]connect!
-    if (!shard_->irc_) {
-        Console::Write("[twitch] pong: irc connection is not established\n");
-    }
-    else {
-        auto pongRequest = request::twitch::Pong{}.Build();
-        shard_->irc_->ScheduleWrite(std::move(pongRequest), []() {
-            Console::Write("[twitch] send pong request\n");
-        });
-    }
+    // when `irc_` failed [re-]connect!
+    auto pongRequest = request::twitch::Pong{}.Build();
+    shard_->irc_->ScheduleWrite(std::move(pongRequest), []() {
+        Console::Write("[twitch] send pong request\n");
+    });
 }
 
 void IrcShard::Invoker::Execute(command::Validate) {
@@ -324,26 +322,26 @@ void IrcShard::Invoker::Execute(command::Validate) {
     );
 
     const Config::Identity kIdentity { "twitch" };
-    const Config *config = shard_->service_->GetConfig();
+    const Config *const config = shard_->service_->GetConfig();
     const auto secret = config->GetSecret(kIdentity);
+    // TODO: do I need to throw this? 
+    // I have no idea how to handle this anyway
     if (!secret) {
-        throw std::runtime_error("Fail to create config");
+        throw std::runtime_error("Fail to aquire config");
     }
 
-    auto weak = utils::WeakFrom<HttpConnection>(connection);
     auto connect = [connection](Chain::Callback cb) {
         connection->Connect(std::move(cb));
     };
-
-    auto request = request::twitch::Validation{ secret->token_ }.Build();
-    auto write = [connection, req = std::move(request)](Chain::Callback cb) {
-        connection->ScheduleWrite(std::move(req), std::move(cb));
+    auto write = [connection, token = secret->token_](Chain::Callback cb) {
+        auto request = request::twitch::Validation{ token }.Build();
+        connection->ScheduleWrite(std::move(request), std::move(cb));
     };
-    
     auto read = [connection](Chain::Callback cb) {
         connection->Read(std::move(cb));
     };
     
+    auto weak = utils::WeakFrom<HttpConnection>(connection);    
     auto readCallback = [weak]() {
         auto shared = weak.lock();
         const auto [head, body] = shared->AcquireResponse();
@@ -371,67 +369,95 @@ void IrcShard::Invoker::Execute(command::Validate) {
 }
 
 void IrcShard::Invoker::Execute(command::Shutdown) {
+    assert(shard_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
+    
     assert(false && "TODO: not implemented");    
 }
 
 void IrcShard::Invoker::Execute(command::Join cmd) {
     assert(shard_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
+    
     // TODO: still need to handle the case 
-    // when `irc_` is alive but failed [re-]connect!
-    if (!shard_->irc_) {
-        Console::Write("[twitch] join: irc connection is not established\n");
+    // when `irc_` failed [re-]connect!
+    auto& generalBucket = shard_->buckets_[Bucket::kGeneral];
+    auto ticket = generalBucket.TryAcquire();
+    if (!ticket) {
+        Console::Write("[twitch] join: can't join a channel:"
+            , cmd.channel_, "; meet Rate Limit\n");
+        return;
     }
-    else {
-        auto join = request::twitch::Join{cmd.channel_}.Build();
-        shard_->irc_->ScheduleWrite(std::move(join), []() {
-            Console::Write("[twitch] send join channel request\n");
-        });
-    }
+    
+    auto join = request::twitch::Join{cmd.channel_}.Build();
+    shard_->irc_->ScheduleWrite(std::move(join), [ticket]() mutable {
+        Console::Write("[twitch] send join channel request\n");
+        assert(ticket);
+        // just finished writing, return the ticket!
+        ticket->Release();
+    });
 }
 
 void IrcShard::Invoker::Execute(command::Chat cmd) {
     assert(shard_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
+
     // TODO: still need to handle the case 
-    // when `irc_` is alive but failed [re-]connect!
-    if (!shard_->irc_) {
-        Console::Write("[twitch] chat: irc connection is not established\n");
+    // when `irc_` is alive but failed [re-]connecкt!
+    auto& chatBucket = shard_->buckets_[Bucket::kChannel];
+    auto ticket = chatBucket.TryAcquire();
+    if (!ticket) {
+        Console::Write("[twitch] chat: can't use PRIVMSG in channel:"
+            , cmd.channel_, "; meet Rate Limit\n");
+        return;
     }
-    else {
-        auto chat = request::twitch::Chat{cmd.channel_, cmd.message_}.Build();
-        Console::Write("[twitch] trying to send message:"
-            , chat.substr(0, chat.size() - 2), "\n");
-        shard_->irc_->ScheduleWrite(std::move(chat), []() {
-            Console::Write("[twitch] sent message to channel\n");
-        });
-    }
+    
+    auto chat = request::twitch::Chat{cmd.channel_, cmd.message_}.Build();
+    Console::Write("[twitch] trying to send message:"
+        , std::string_view { chat.data(), chat.size() - 2 }, "\n");
+    shard_->irc_->ScheduleWrite(std::move(chat), [ticket = std::move(ticket)]() mutable {
+        Console::Write("[twitch] sent message to channel\n");
+        assert(ticket);
+        // just finished writing, return the ticket!
+        ticket->Release();
+    });
 }
 
 void IrcShard::Invoker::Execute(command::Leave cmd) {
     assert(shard_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
     // TODO: still need to handle the case 
-    // when `irc_` is alive but failed [re-]connect!
-    if (!shard_->irc_) {
-        Console::Write("[twitch] leave: irc connection is not established\n");
-    }
-    else {
-        auto leave = request::twitch::Leave{cmd.channel_}.Build();
-        shard_->irc_->ScheduleWrite(std::move(leave), []() {
-            Console::Write("[twitch] send part channel request\n");
-        });
-    }
+    // when `irc_` failed [re-]connect!
+    auto leave = request::twitch::Leave{cmd.channel_}.Build();
+    shard_->irc_->ScheduleWrite(std::move(leave), [] {
+        Console::Write("[twitch] sent part channel request\n");
+    });
 }
 
 void IrcShard::Invoker::Execute(command::Login cmd) {
     assert(shard_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
+
     // TODO: still need to handle the case 
     // when all attempt to reconnect failed!
-    if (!shard_->irc_) {
-        Console::Write("[twitch] login: irc connection is not established\n");
+
+    // only PASS is counted as rate-limited command!
+    auto& chatBucket = shard_->buckets_[Bucket::kGeneral];
+    auto ticket = chatBucket.TryAcquire();
+    if (!ticket) {
+        Console::Write("[twitch]: can't authenticate user:"
+            , cmd.user_, "; meet Rate Limit\n");
+        return;
     }
 
     auto request = request::twitch::IrcAuth{cmd.token_, cmd.user_}.Build();
     auto irc = shard_->irc_.get();
-    auto readCallback = [irc, shard = shard_](){
+    // This lambda will be copied/moved to IrcConnection onRead callback
+    // and will be called whenever it read from the socket!
+    auto readCallback = [irc, shard = shard_] {
+        // handle resoponse
+        // TODO: I think this should be posted to execution
+        // and not processed here. Connection should not wait!
         shard->HandleResponse(irc->AcquireResponse());
     };
 
@@ -441,26 +467,33 @@ void IrcShard::Invoker::Execute(command::Login cmd) {
     auto write = [irc, request = std::move(request)](Chain::Callback cb) {
         irc->ScheduleWrite(std::move(request), std::move(cb));
     };
-    auto read = [irc](Chain::Callback cb){
+    // It needed to be executed only once and after socket write completion
+    auto releaseTicket = [ticket = std::move(ticket)] () mutable {
+        assert(ticket);
+        ticket->Release();
+    };
+    auto read = [irc](Chain::Callback cb) {
         irc->Read(std::move(cb));
     };
 
     auto chain = std::make_shared<Chain>(shard_->context_);
     (*chain).Add(std::move(connect))
-        .Add(std::move(write))
+        .Add(std::move(write), std::move(releaseTicket))
         .Add(std::move(read), std::move(readCallback))
         .Execute();
 }
 
 void IrcShard::Invoker::Execute(command::RealmStatus cmd) {
     assert(shard_ && "Cannot be null");
-    assert(shard_->irc_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
 
     Console::Write("[twitch] execute realm-status command:"
         , cmd.channel_, cmd.user_, '\n');
-    command::RawCommand raw { "realm-status", { 
-        command::ParamData { "channel", std::move(cmd.channel_) }
-        , { "user", std::move(cmd.user_) } }
+    command::RawCommand raw { 
+        "realm-status", std::initializer_list<command::ParamData> { 
+            { "channel", std::move(cmd.channel_) },
+            { "user", std::move(cmd.user_) } 
+        }
     };
 
     if (shard_->commands_->TryPush(std::move(raw))) {
@@ -468,21 +501,23 @@ void IrcShard::Invoker::Execute(command::RealmStatus cmd) {
     }
     else {
         Console::Write("[twitch] failed to push "
-            "`RealmStatus` to queue is full\n");
+            "`RealmStatus`. Queue is full\n");
     }
 }
 
 void IrcShard::Invoker::Execute(command::Arena cmd) {
     assert(shard_ && "Cannot be null");
-    assert(shard_->irc_ && "Cannot be null");
+    assert(shard_->irc_ && "irc connection is not established");
 
     Console::Write("[twitch] execute arena command:"
-        , cmd.channel_, cmd.user_,  cmd.player_, '\n');
+        , cmd.channel_, cmd.user_, cmd.player_, '\n');
 
-    command::RawCommand raw { "arena", { 
-        command::ParamData { "channel", std::move(cmd.channel_) }
-        , { "user", std::move(cmd.user_) } 
-        , { "player", std::move(cmd.player_) } }
+    command::RawCommand raw { 
+        "arena", std::initializer_list<command::ParamData> { 
+            { "channel", std::move(cmd.channel_) },
+            { "user", std::move(cmd.user_) }, 
+            { "player", std::move(cmd.player_) } 
+        }
     };
 
     if (shard_->commands_->TryPush(std::move(raw))) {
