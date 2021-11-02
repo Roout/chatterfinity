@@ -31,34 +31,81 @@ namespace {
         assert(shift < src.size());
         return { src.data() + shift, src.size() - shift};
     }
+
+    struct TicketDeleter final {
+        using Ticket = service::twitch::MessageBucket::Ticket;
+        
+        void operator()(Ticket * ticket) const noexcept {
+            assert(ticket);
+            ticket->Release(); 
+            delete ticket;
+        }
+    };
 }
 
 namespace service::twitch {
 
+MessageBucket::Ticket::Ticket(MessageBucket* bucket) 
+    : bucket_ { bucket } 
+    , released_ { false }
+{
+    assert(bucket);
+}
+
+void MessageBucket::Ticket::Release() noexcept {
+    assert(bucket_);
+    if (released_) return;
+
+    try {
+        bucket_->Release();
+        released_ = true;
+    }
+    catch (...) {
+        // TODO: should I ignore the exception?
+        // Possible exception:
+        //  - underlying std::mutex::lock may throw 
+    }
+}
+
 MessageBucket::MessageBucket(std::uint16_t amount, Seconds rate)
     : refillAmount_ { amount }
     , available_ { amount }
+    , consumed_ { 0 }
     , refillRate_ { rate }
     , lastRefillTime_ { std::chrono::steady_clock::now() }
 {}
 
-// Actually, it's not precision approach 
-// cuz we lose some tickets(opportunity to write)
-// but I can avoid using timer
-bool MessageBucket::TryUse() {
-    TimePoint now = std::chrono::steady_clock::now();
-    Seconds elapsed = std::chrono::duration_cast<Seconds>(lastRefillTime_ - now);
-    
-    if (elapsed >= refillRate_) {
-        lastRefillTime_ = now;
-        available_ = refillAmount_;
+std::shared_ptr<MessageBucket::Ticket> MessageBucket::TryAcquire() {
+    std::lock_guard<std::mutex> lock { mutex_ };
+    if (available_ == 0) {
+        return nullptr;
     }
 
-    if (available_ > 0) {
+    // try to update consumed_
+    TryRefill();
+
+    if (consumed_ < refillAmount_) {
+        consumed_++;
         available_--;
-        return true;
+        return std::shared_ptr<Ticket>{new Ticket{this}, TicketDeleter{}};
     }
-    return false;
+    return nullptr;
+}
+
+void MessageBucket::Release() {
+    std::lock_guard<std::mutex> lock { mutex_ };
+    available_++;
+    TryRefill();
+}
+
+
+void MessageBucket::TryRefill() {
+    const auto now = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration_cast<Seconds>(now - lastRefillTime_);
+    if (elapsed >= refillRate_) {
+        lastRefillTime_ = now;
+        consumed_ = 0;
+    }
 }
 
 IrcShard::IrcShard(Twitch *service
