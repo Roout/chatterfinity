@@ -112,13 +112,21 @@ Arena leaderboard is one of the most interesting thing for WOW community so it w
 ### Restrictions
 
 There are several very imporatant restriction on the communication in twitch chat. They depend on MODE and Bot authority.
-Bot doesn't consider twitch restrictions yet. Following restriction will be implemented soon:
+Bot doesn't consider some twitch restrictions yet.  
+
+**NOT implemented yet:**
 
 - Minimum 1 second delay between messages via IRC connection. For slow mode it can be greater.
-- 30 messages for 1 second
 - Authority e.g., subscriber mode, etc
 
-If IRC or HTTPS connection fails to connect/read/write it will try to reconnect 3 times with 2s, 4s, 8s timeouts. if you're not managing connection's lifetime by yourself it will be destroyed on failure to reconnect.
+**ALREADY implemented:**
+
+- [Rate Limit](https://dev.twitch.tv/docs/irc/guide) is used for **PRIVMSG**, **JOIN**, **PASS**.  
+Only 2 buckets with the strictest restrictions supported now: general bucket(**JOIN**, **PASS**), channel bucket(**PRIVMSG**).
+Buckets doesn't take into account users authority and assuming this is simple account. Now you're neither moderator neither subscriber. Authority support is not implemented.
+Buckets doesn't take into account bans, slowmodes, etc. These features will be implemented later.
+
+If IRC or HTTPS connection fails to connect/read/write it will try to reconnect 3 times with 2s, 4s, 8s timeouts.
 
 ## Certificate Authorities
 
