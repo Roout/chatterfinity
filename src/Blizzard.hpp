@@ -26,9 +26,7 @@ class Blizzard
     : public std::enable_shared_from_this<Blizzard> 
 {
 public:
-    using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
-    
-    Blizzard(const Config *config, Container * outbox);
+    Blizzard(const Config *config, command::Queue *outbox);
 
     Blizzard(const Blizzard&) = delete;
     Blizzard(Blizzard&&) = delete;
@@ -78,7 +76,7 @@ private:
 
     std::unique_ptr<Invoker> invoker_;
     const Config * const config_ { nullptr };
-    Container * const outbox_ { nullptr };
+    command::Queue * const outbox_ { nullptr };
     
     // connection id
     static inline size_t lastID_ { 0 };

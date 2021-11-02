@@ -23,7 +23,6 @@ using boost::asio::ip::tcp;
 
 class App {
 public:
-    using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
 
     App() 
         : commands_ { kSentinel }
@@ -68,6 +67,7 @@ public:
         // create consumers
         for (std::size_t i = 0; i < kWorkerCount; i++) {
             workers_.emplace_back([this]() {
+                // TODO: this stuff in while loop may throw
                 while (true) {
                     auto cmd { commands_.TryPop() };
                     if (!cmd) {
@@ -79,7 +79,12 @@ public:
                         params.reserve(cmd->params_.size());
                         for (auto&& [k, v]: cmd->params_) {
                             params.emplace_back(command::ParamView{ k, v });
-                        }        
+                        }
+                        // TODO: this stuff may throw run-time errors, see: 
+                        // <code> // IrcShard.cpp
+                        // void IrcShard::Invoker::Execute(command::Validate);
+                        // </code>
+                        // maybe you should try to catch and process this exception?
                         std::invoke(*handle, params);
                     }
                     else {
@@ -105,7 +110,7 @@ private:
 
     std::vector<std::thread> workers_;
     // common queue
-    Container commands_;
+    command::Queue commands_;
     Translator translator_;
     // configuration and settings
     Config config_;

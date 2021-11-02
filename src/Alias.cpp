@@ -27,13 +27,13 @@ void AliasTable::Add(const Alias& alias
 
 std::optional<AliasTable::CommandLine> AliasTable::GetCommand(
     std::string_view alias
-) {
-    auto it = std::find_if(aliases_.begin(), aliases_.end()
+) const {
+    auto it = std::find_if(aliases_.cbegin(), aliases_.cend()
         , [&alias](const Bind& other) {
             return other.alias == alias;
         });
 
-    if (it != aliases_.end()) {
+    if (it != aliases_.cend()) {
         return std::make_optional(CommandLine{ it->command, it->params });
     }
     return std::nullopt;

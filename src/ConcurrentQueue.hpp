@@ -39,7 +39,7 @@ public:
             lock.unlock();
             isPushed = true;
             // notify consumers
-            notifier_.notify_all();
+            notifier_.notify_one();
         }
         return isPushed;
     }

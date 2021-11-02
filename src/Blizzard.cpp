@@ -15,7 +15,7 @@ namespace domain = blizzard::domain;
 
 namespace service {
 
-Blizzard::Blizzard(const Config *config, Container * outbox) 
+Blizzard::Blizzard(const Config *config, command::Queue * outbox) 
     : context_ { std::make_shared<boost::asio::io_context>() }
     , work_ { context_->get_executor() }
     , ssl_ { std::make_shared<ssl::context>(ssl::context::method::sslv23_client) }
@@ -82,7 +82,7 @@ void Blizzard::QueryRealm(Callback continuation) {
 
     const auto& token = cache_[Domain::kToken];
     assert(token.Get<std::string>());
-    auto request = blizzard::Realm{ *token.Get<std::string>() }.Build();
+    auto request = request::blizzard::Realm{ *token.Get<std::string>() }.Build();
 
     auto readCallback = [weak = utils::WeakFrom<HttpConnection>(connection)
         , service = this
@@ -137,7 +137,7 @@ void Blizzard::QueryRealmStatus(command::RealmStatus cmd
     auto connection = std::make_shared<HttpConnection>(
         context_, ssl_ , kHost, kService, GenerateId()
     );
-    auto request = blizzard::RealmStatus{ realm.Get<domain::Realm>()->id
+    auto request = request::blizzard::RealmStatus{ realm.Get<domain::Realm>()->id
         , *token.Get<std::string>() }.Build();
 
     auto readCallback = [weak = utils::WeakFrom<HttpConnection>(connection)
@@ -221,7 +221,7 @@ void Blizzard::AcquireToken(Callback continuation) {
             "Cannot find a service with identity = blizzard");
     }
     
-    auto request = blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
+    auto request = request::blizzard::CredentialsExchange(secret->id_, secret->secret_).Build();
     
     auto readCallback = [weak = utils::WeakFrom<HttpConnection>(connection)
         , service = this
@@ -385,7 +385,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         
         constexpr uint64_t kSeason { 1 };
         constexpr uint64_t kTeamSize { 2 };
-        auto request = blizzard::Arena(kSeason, kTeamSize, token).Build();
+        auto request = request::blizzard::Arena(kSeason, kTeamSize, token).Build();
         connection->ScheduleWrite(std::move(request), std::move(cb));
     };
 

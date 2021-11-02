@@ -21,6 +21,7 @@ list(APPEND headers
 	"src/Translator.hpp"
 	"src/Command.hpp"
 	"src/Alias.hpp"
+	"src/IrcShard.hpp"
 	
 	"src/Console.hpp"
 	"src/Blizzard.hpp"
@@ -42,6 +43,7 @@ list(APPEND sources
 	"src/Chain.cpp"
 	"src/Alias.cpp"
 	"src/Utility.cpp"
+	"src/IrcShard.cpp"
 	
 	"src/Console.cpp"
 	"src/Blizzard.cpp"

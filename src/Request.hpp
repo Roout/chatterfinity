@@ -3,6 +3,8 @@
 #include <string_view>
 #include <string>
 
+namespace request {
+
 class Query {
 public:
     virtual ~Query() = default;
@@ -14,36 +16,6 @@ namespace twitch {
     static constexpr std::string_view kHost = "irc.chat.twitch.tv";
     static constexpr std::string_view kService = "6697";
     
-    // Sending user access and app access tokens
-    // When an API request requires authentication, send the access token as a header
-    class SendToken : public Query {
-    public:
-
-        SendToken(const std::string& token)
-            : token_ { token }
-        {}
-
-        std::string Build() const override;
-
-    private:
-        std::string token_;
-    };
-
-    class TokenRevoke : public Query {
-    public:
-
-        TokenRevoke(const std::string& id, const std::string& token)
-            : id_ { id }
-            , token_ { token }
-        {}
-
-        std::string Build() const override;
-
-    private:
-        std::string id_;
-        std::string token_;
-    };
-
     // validate user access tokens
     // https://dev.twitch.tv/docs/authentication#getting-tokens
     // https://dev.twitch.tv/docs/authentication#validating-requests
@@ -73,6 +45,18 @@ namespace twitch {
     private:
         std::string token_;
         std::string user_;
+    };
+
+    class Ping : public Query {
+    public:
+
+        Ping(const std::string& channel) 
+            : channel_ { channel } {}
+
+        std::string Build() const override;
+        
+    private:
+        std::string channel_;
     };
 
     class Pong : public Query {
@@ -157,7 +141,9 @@ namespace blizzard {
         std::string secret_;
     };
 
-    // Realm API: Realm by slug
+    // > Realm API:
+    // > Realm
+    // > Returns a single realm by slug or ID.
     class Realm : public Query {
     public:
 
@@ -171,8 +157,9 @@ namespace blizzard {
         std::string token_;
     };
 
-    // 2. Connected Realm API: Connected Realm
-    // Realm Status
+    // > Connected Realm API: 
+    // > Connected Realm
+    // > Realm Status
     class RealmStatus : public Query {
     public:
 
@@ -195,7 +182,10 @@ namespace blizzard {
     class Arena : public Query {
     public:
 
-        Arena(std::uint64_t season, std::uint64_t teamSize, const std::string& token)
+        Arena(std::uint64_t season
+            , std::uint64_t teamSize
+            , const std::string& token
+        )   
             : season_ { season }
             , teamSize_ { teamSize }
             , token_ { token }
@@ -210,3 +200,5 @@ namespace blizzard {
     };
     // 6. Auction
 }
+
+} // namespace request

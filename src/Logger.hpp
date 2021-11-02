@@ -48,6 +48,7 @@ public:
             default: break;
         }
         ((os_ << " " << std::forward<Args>(args)), ...);
+        os_.flush();
     }
 
 private:

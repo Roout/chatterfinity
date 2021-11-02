@@ -8,16 +8,14 @@
 #include <vector>
 #include <thread>
 
-#include "Command.hpp"
 #include "Config.hpp"
-#include "Response.hpp"
-#include "Translator.hpp"
-#include "ConcurrentQueue.hpp"
-#include "Environment.hpp"
 #include "Command.hpp"
-#include "Alias.hpp"
+#include "IrcShard.hpp"
 
-class IrcConnection;
+// forward declaration
+namespace command {
+    class AliasTable;
+}
 
 namespace service {
 
@@ -28,9 +26,9 @@ class Twitch
     : public std::enable_shared_from_this<Twitch> 
 {
 public:
-    using Container = CcQueue<command::RawCommand, cst::kQueueCapacity>;
-
-    Twitch(const Config *config, Container * outbox, command::AliasTable * aliases);
+    Twitch(const Config *config
+        , command::Queue *outbox
+        , command::AliasTable *aliases);
     ~Twitch();
     Twitch(const Twitch&) = delete;
     Twitch(Twitch&&) = delete;
@@ -44,6 +42,7 @@ public:
     >
     void Execute(Command&& cmd);
 
+    // Called only from App::~App
     void ResetWork();
 
     const Config* GetConfig() const noexcept {
@@ -51,13 +50,10 @@ public:
     }
 
 private:
-    void HandleResponse(net::irc::Message message);
-
-    void HandlePrivateMessage(net::irc::Message& message);
-
-    class Invoker;
-
-    using Work = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
+    template<class T>
+    using executor_work_guard = boost::asio::executor_work_guard<T>;
+    using executor_type = boost::asio::io_context::executor_type;
+    using Work = executor_work_guard<executor_type>;
 
     static constexpr size_t kThreads { 2 };
     std::vector<std::thread> threads_;
@@ -65,38 +61,17 @@ private:
     std::shared_ptr<boost::asio::io_context> context_;
     Work work_;
     std::shared_ptr<ssl::context> ssl_;
-    std::shared_ptr<IrcConnection> irc_;
-    Translator translator_;
     
+    // keep twitch's secret data
     const Config * const config_ { nullptr };
-    Container * const outbox_ { nullptr };
-    command::AliasTable * const aliases_ { nullptr };
-
-    std::unique_ptr<Invoker> invoker_;
-};
-
-class Twitch::Invoker {
-public:
-    Invoker(Twitch *twitch) : twitch_ { twitch } {}
-
-    void Execute(command::Help);
-    void Execute(command::Shutdown);
-    void Execute(command::Validate);
-    void Execute(command::Login);
-    void Execute(command::Pong);
-    void Execute(command::Join);
-    void Execute(command::Leave);
-    void Execute(command::Chat);
-    void Execute(command::RealmStatus);
-    void Execute(command::Arena);
-
-private:
-    Twitch * const twitch_ { nullptr };
+    // It's been seen as readonly unique_ptr by App's worker threads
+    // Note: in call-chains it's only been dereferenced! (readonly access)
+    std::unique_ptr<twitch::IrcShard> shard_;
 };
 
 template<typename Command, typename Enable>
 inline void Twitch::Execute(Command&& cmd) {
-    invoker_->Execute(std::forward<Command>(cmd));
+    shard_->Execute(std::forward<Command>(cmd));
 }
 
 } // namespace service

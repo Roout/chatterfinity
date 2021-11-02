@@ -45,18 +45,24 @@ void Connection::Close() {
 
     socket_->shutdown(error);
     if (error) {
-        log_->Write(LogType::kError, "SSL stream shutdown:", error.message(), '\n');
+        log_->Write(LogType::kError
+            , "SSL stream shutdown:"
+            , error.message(), '\n');
         error.clear();
     }
     if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
         ll.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
         if (error) {
-            log_->Write(LogType::kError, "SSL underlying socket shutdown:", error.message(), '\n');
+            log_->Write(LogType::kError
+                , "SSL underlying socket shutdown:"
+                , error.message(), '\n');
             error.clear();
         }
         ll.close(error);
         if (error) {
-            log_->Write(LogType::kError, "SSL underlying socket close:", error.message(), '\n');
+            log_->Write(LogType::kError
+                , "SSL underlying socket close:"
+                , error.message(), '\n');
         }
     } 
 }
@@ -184,6 +190,9 @@ void Connection::ScheduleWrite(std::string text, std::function<void()> onWrite) 
             self->Write();
         }
     };
+    // [CRITICAL SECTION]
+    // ASSUMED it's thread-safe to `post` completion token through `strand_`
+    // see https://stackoverflow.com/questions/51859895/is-boostasioio-servicepost-atomic/51862417
     boost::asio::post(strand_, std::move(deferredCallee));
 }
 
