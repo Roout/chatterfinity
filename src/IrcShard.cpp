@@ -237,6 +237,10 @@ void IrcShard::HandlePrivateMessage(net::irc::Message& message) {
             for (auto&& [k, v]: params) ss << k << " " << v << ' '; 
             Console::Write("[twitch] params:", ss.str(), '\n');
             
+            // This is a shortcut: 
+            // avoiding global queue (processed in App type)
+            // I call Invoker::Execute when connection has 
+            // just read incoming message
             std::invoke(*handle, commandParams);
         }
     }
@@ -266,6 +270,10 @@ void IrcShard::HandleResponse(net::irc::Message message) {
         } break;
         case IrcCommands::kPing: {
             if (auto handle = translator_.GetHandle("ping"); handle) {
+                // This is a shortcut: 
+                // avoiding global queue (processed in App type)
+                // I call Invoker::Execute when connection has 
+                // just read incoming message
                 std::invoke(*handle, Translator::Params{});
             }
         } break;
