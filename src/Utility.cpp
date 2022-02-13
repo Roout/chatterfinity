@@ -5,6 +5,7 @@
 #include <cctype>       // std::tolower
 #include <cwchar>       // std::mbrtowc
 #include <locale>
+#include <algorithm>
 
 namespace utils {
 
@@ -26,6 +27,11 @@ namespace utf8 {
 bool IsEqual(std::string_view lhs, std::string_view rhs) {
     if (lhs.size() != rhs.size()) return false;
     if (lhs.empty()) return true;
+    if (auto it = std::mismatch(lhs.cbegin(), lhs.cend(), rhs.cbegin()).first;
+        it == lhs.cend())
+    { // luckly, bytewise match
+        return true;
+    };
     
     /**
      * If the next `n` bytes constitute an incomplete, 
