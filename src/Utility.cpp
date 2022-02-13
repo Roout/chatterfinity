@@ -74,7 +74,7 @@ bool IsEqual(std::string_view lhs, std::string_view rhs) {
 
 } // namespace utf8
 
-size_t ExtractInteger(std::string_view sequence, size_t radix) {
+size_t ExtractInteger(std::string_view sequence, int radix) {
     using namespace std::literals;
     size_t value;
     const auto [parsed, ec] = std::from_chars(std::data(sequence)

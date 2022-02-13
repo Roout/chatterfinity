@@ -32,7 +32,7 @@ bool IsEqual(std::string_view lhs, std::string_view rhs);
 
 } // namespace utf8 
 
-size_t ExtractInteger(std::string_view sequence, size_t radix = 10);
+size_t ExtractInteger(std::string_view sequence, int radix = 10);
 
 std::string_view Trim(std::string_view text
     , std::string_view exclude = " \n\r\t\v\0"
