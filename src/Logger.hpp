@@ -3,6 +3,7 @@
 #include <fstream>
 #include <chrono>
 #include <mutex>
+#include <sstream>
 
 enum class LogType {
     kError,
@@ -15,12 +16,10 @@ class Log final {
 public:
 
     Log(const char* filename) {
-        std::lock_guard<std::mutex> lock(mutex_);
         os_.open(filename, std::ofstream::out);
     }
 
     ~Log() {
-        std::lock_guard<std::mutex> lock(mutex_);
         if (os_.is_open()) {
             os_.close();
         }
@@ -33,21 +32,23 @@ public:
             now.time_since_epoch()
         );
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        os_ << ms.count() << ' ';
+        std::stringstream ss;
+        ss << ms.count() << ' ';
         switch (type) {
             case LogType::kInfo: {
-                os_ << "--info: ";
+                ss << "[info ] ";
             } break;
             case LogType::kError: {
-                os_ << "--error: ";
+                ss << "[error] ";
             } break;
             case LogType::kWarning: {
-                os_ << "--warning: ";
+                ss << "[warn ] ";
             } break;
             default: break;
         }
-        ((os_ << " " << std::forward<Args>(args)), ...);
+        ((ss << " " << std::forward<Args>(args)), ...);
+        std::lock_guard<std::mutex> lock(mutex_);
+        os_ << ss.str();
         os_.flush();
     }
 
