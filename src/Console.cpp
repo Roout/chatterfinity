@@ -3,6 +3,7 @@
 #include "Environment.hpp"
 
 #include <sstream>
+#include <algorithm>
 #include <cctype> // std::tolower
 
 #include <cassert>
