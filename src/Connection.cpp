@@ -107,7 +107,10 @@ void Connection::OnResolve(const boost::system::error_code& error
         socket_->set_verify_callback(ssl::rfc2818_verification(host_.data()));
  
         // 2. set SNI Hostname (many hosts need this to handshake successfully)
-        // https://github.com/chriskohlhoff/asio/issues/262
+        // TLS-SNI (without this option, handshakes attempts with hosts behind CDNs will fail,
+        // due to the fact that the CDN does not have enough information at the TLS layer
+        // to decide where to forward the handshake attempt).
+        // Source: https://github.com/chriskohlhoff/asio/issues/262
         if (!SSL_set_tlsext_host_name(socket_->native_handle(), host_.data())){
             boost::system::error_code ec{ static_cast<int>(::ERR_get_error()), boost::asio::error::get_ssl_category() };
             throw boost::system::system_error{ ec };
@@ -184,8 +187,7 @@ void Connection::ScheduleWrite(std::string text, std::function<void()> onWrite) 
         , callback = std::move(onWrite)
         , self = shared_from_this()
     ]() mutable {
-        self->outbox_.Enque(std::move(text));
-        self->onWriteSuccess_ = std::move(callback);
+        self->outbox_.Enque(std::move(text), std::move(callback));
         if (!self->isWriting_) {
             self->Write();
         }
@@ -219,24 +221,28 @@ void Connection::OnWrite(const boost::system::error_code& error, size_t bytes) {
         log_->Write(LogType::kError, "OnWrite:", error.message(), '\n');
         assert(socket_);
         if (auto&& ll = socket_->lowest_layer(); ll.is_open()) {
-            // prevent reconnection after shutdown
+            // confirm that socket is open to prevent reconnection after shutdown
             Reconnect();
         }
     }
     else {
         const auto& sequence = outbox_.GetBufferSequence();
+        // dump data we're sending
+        // TODO: escape special characters
         for (size_t i = 0; i < sequence.size(); i++) {
             const auto buf = sequence[i];
             std::string_view dump { static_cast<const char*>(buf.data()), buf.size() };
             log_->Write(LogType::kInfo, i, "sent", bytes, "bytes :", utils::Trim(dump), "\n");
         }
+        // as we successfully send all data to remote peer
+        // we can now invoke all callbacks which corresponds to these data
+        for (const auto& cb: outbox_.GetCallbackSequence()) {
+            std::invoke(cb);
+        }
         if (outbox_.GetQueueSize()) {
             // there are a few messages scheduled to be sent
             log_->Write(LogType::kInfo, "queued messages:", outbox_.GetQueueSize(), "\n");
             Write();
-        }
-        if (onWriteSuccess_) {
-            std::invoke(onWriteSuccess_);
         }
     } 
 }
