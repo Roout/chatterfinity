@@ -383,7 +383,7 @@ void Blizzard::Invoker::Execute(command::Arena command) {
         const auto& tokenSlot = service->cache_[Domain::kToken];
         const auto& token = *tokenSlot.Get<std::string>();
         
-        constexpr uint64_t kSeason { 1 };
+        constexpr uint64_t kSeason { 2 };
         constexpr uint64_t kTeamSize { 2 };
         auto request = request::blizzard::Arena(kSeason, kTeamSize, token).Build();
         connection->ScheduleWrite(std::move(request), std::move(cb));

@@ -42,6 +42,19 @@ public:
 
     void Connect(std::function<void()> onConnect = {});
 
+    /**
+     * @brief Enque data to be sent when connection is able to write,
+     * i.e. `isWritting == false`
+     * 
+     * @param text data which will be enqued to the 
+     * switch buffer to be sent with other data at once according to scatter-gether idiom
+     * @param onWrite callback which will be invoked right after the banch of data will
+     * be sent to peer. Callback will be invoked in the same thread 
+     * as `OnWrite(const boost::system::error_code&, size_t)` being invoked.
+     * @note if there was a banch of data then the corresponding banch of callbacks will be invoked
+     * sequentially (see `OnWrite` implementation). This approach leads to following restrictions:
+     * - it MUST NOT block or do any "heavy" resource-consuming work.
+     */
     void ScheduleWrite(std::string text, std::function<void()> onWrite = {});
 
     virtual void Read(std::function<void()> onRead = {}) = 0;
@@ -84,7 +97,6 @@ protected:
 
     // === callbacks ===
     std::function<void()> onConnectSuccess_;
-    std::function<void()> onWriteSuccess_;
     std::function<void()> onReadSuccess_;
 
     // === Write ===

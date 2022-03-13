@@ -70,8 +70,7 @@ namespace twitch {
     class Join : public Query {
     public:
 
-        Join(const std::string& channel) 
-            : channel_ { channel } {}
+        Join(const std::string& channel);
 
         std::string Build() const override;
 
@@ -186,7 +185,8 @@ namespace blizzard {
             , std::uint64_t teamSize
             , const std::string& token
         )   
-            : season_ { season }
+            : region_ { 0 } // TODO: I don't know what it means but it was added to API
+            , season_ { season }
             , teamSize_ { teamSize }
             , token_ { token }
         {}
@@ -194,6 +194,7 @@ namespace blizzard {
         std::string Build() const override;
 
     private:
+        std::uint64_t region_;
         std::uint64_t season_;
         std::uint64_t teamSize_;
         std::string token_;
