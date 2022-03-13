@@ -70,8 +70,7 @@ namespace twitch {
     class Join : public Query {
     public:
 
-        Join(const std::string& channel) 
-            : channel_ { channel } {}
+        Join(const std::string& channel);
 
         std::string Build() const override;
 

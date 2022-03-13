@@ -1,8 +1,10 @@
 #include "Request.hpp"
+#include <cctype> // std::tolower
 #include <string>
 #include <string_view>
 #include <cstdint>
 #include <cassert>
+#include <algorithm>
 
 #include <boost/format.hpp>
 
@@ -93,6 +95,12 @@ std::string Leave::Build() const {
     return (boost::format(requestTemplate) % channel_).str();
 }
 
+Join::Join(const std::string& channel)
+    : channel_ { channel }
+{
+    std::transform(channel_.cbegin(), channel_.cend(), channel_.begin()
+        , [](unsigned char ch) { return std::tolower(ch); });
+}
 
 std::string Join::Build() const {
     // https://datatracker.ietf.org/doc/html/rfc1459.html#section-1.3
