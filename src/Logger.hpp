@@ -28,7 +28,7 @@ public:
     template<class ...Args>
     void Write(const LogType type, Args &&... args) {
         const auto now = std::chrono::high_resolution_clock::now();
-        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        const auto ms = std::chrono::duration_cast<std::chrono::nanoseconds>(
             now.time_since_epoch()
         );
 
@@ -46,9 +46,9 @@ public:
             } break;
             default: break;
         }
-        ((ss << " " << std::forward<Args>(args)), ...);
+        ((ss << std::forward<Args>(args)), ...);
         std::lock_guard<std::mutex> lock(mutex_);
-        os_ << ss.str();
+        os_ << ss.str() << '\n';
         os_.flush();
     }
 
@@ -56,3 +56,27 @@ private:
     std::ofstream   os_ {};
     std::mutex      mutex_;
 };
+
+template<class ...Args>
+inline void Warn(Log& log, Args&& ...args) {
+    log.Write(LogType::kWarning, std::forward<Args>(args)...);
+}
+template<class ...Args>
+inline void Info(Log& log, Args&& ...args) {
+    log.Write(LogType::kInfo, std::forward<Args>(args)...);
+}
+template<class ...Args>
+inline void Error(Log& log, Args&& ...args) {
+    log.Write(LogType::kError, std::forward<Args>(args)...);
+}
+
+#define LOG_WARN(logger, ...) \
+    Warn((logger), __func__, ": ", __VA_ARGS__)
+
+#define LOG_INFO(logger, ...) \
+    Info((logger), __func__, ": ", __VA_ARGS__)
+
+#define LOG_ERROR(logger, ...) \
+    Error((logger), __func__, ": ", __VA_ARGS__)
+
+
