@@ -2,6 +2,7 @@
 
 #include "Connection.hpp"
 #include "Request.hpp"
+#include "Utility.hpp"
 #include "Chain.hpp"
 #include "Console.hpp"
 #include "Config.hpp"
@@ -188,11 +189,14 @@ void IrcShard::HandlePrivateMessage(net::irc::Message& message) {
         std::string_view unprocessed { chatMessage };
         size_t chatCommandEnd = unprocessed.find_first_of(' ');
         if (chatCommandEnd == std::string_view::npos) {
+            assert(!unprocessed.empty());
             chatCommandEnd = unprocessed.size();
         }
+
         // here we're still not sure whether it's a command or just a coincidence
         std::string_view chatCommand { unprocessed.data() + 1, chatCommandEnd - 1 };
-        unprocessed.remove_prefix(chatCommandEnd + 1);
+        unprocessed.remove_prefix(chatCommandEnd);
+        unprocessed = utils::Trim(unprocessed);
         // divide message to tokens (maybe parameters for the chat command)
         auto params = command::ExtractArgs(unprocessed, ' ');
 
